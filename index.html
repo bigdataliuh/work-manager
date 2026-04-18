@@ -181,13 +181,10 @@
     border-right: 1px solid #eee;
   }
   .day-cell.today { background: #e8f0fe; }
-  .day-cell.weekend { background: var(--weekend-bg); }
   .day-label { font-size: 11px; font-weight: 500; color: var(--text-muted); }
   .day-cell.today .day-label { color: #1a73e8; font-weight: 700; }
-  .day-cell.weekend .day-label { color: #bbb; }
   .day-num { font-size: 15px; font-weight: 700; color: #333; }
   .day-cell.today .day-num { color: #1a73e8; }
-  .day-cell.weekend .day-num { color: #bbb; }
 
   /* Category header */
   .cat-header {
@@ -259,7 +256,6 @@
     transition: background 0.15s;
   }
   .daily-cell.today { background: var(--today-bg); }
-  .daily-cell.weekend { background: var(--weekend-bg); }
   .daily-cell:hover { background: #f5f5f5; }
   .daily-cell.today:hover { background: #e5edff; }
   .daily-cell-empty {
@@ -509,6 +505,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [editCell, setEditCell] = useState(null);
+  const [cellTitle, setCellTitle] = useState("");
   const [cellText, setCellText] = useState("");
   const [expandedCell, setExpandedCell] = useState(null);
   const [newTask, setNewTask] = useState({ name:"", category:"项目", priority:"高", responsible:"我", participants:"", deadline:"", status:"进行中" });
@@ -562,14 +559,27 @@ function App() {
     setEditTask(null);
   };
 
+  const getCellData = (task, dk) => {
+    const raw = task.dailyActions[dk];
+    if (!raw) return null;
+    if (typeof raw === 'string') return { title: '', content: raw };
+    return raw;
+  };
+
   const saveCellEdit = () => {
     if(!editCell) return;
     update(d => {
       const t = d.tasks.find(x=>x.id===editCell.taskId);
-      if(t) { if(cellText.trim()) t.dailyActions[editCell.dk]=cellText.trim(); else delete t.dailyActions[editCell.dk]; }
+      if(t) {
+        if(cellTitle.trim() || cellText.trim()) {
+          t.dailyActions[editCell.dk] = { title: cellTitle.trim(), content: cellText.trim() };
+        } else {
+          delete t.dailyActions[editCell.dk];
+        }
+      }
       return d;
     });
-    setEditCell(null); setCellText("");
+    setEditCell(null); setCellTitle(""); setCellText("");
   };
 
   const saveTaskEdit = () => {
@@ -622,7 +632,7 @@ function App() {
       {/* Header */}
       <div className="header">
         <div className="header-top">
-          <h1>📋 工作管理</h1>
+          <h1>📋 刘昊的工作管理系统</h1>
           <div className="header-actions">
             <button className="btn btn-ghost" onClick={()=>setShowSettings(true)}>⚙</button>
             <button className="btn btn-ghost" onClick={()=>setShowArchive(true)}>已完结</button>
@@ -685,25 +695,30 @@ function App() {
                 </div>
                 {days.map(d => {
                   const dk = dateKey(d);
-                  const content = task.dailyActions[dk] || "";
+                  const cellData = getCellData(task, dk);
                   const cellKey = `${task.id}-${dk}`;
                   const isExp = expandedCell === cellKey;
                   return (
                     <div key={dk}
-                      className={`daily-cell ${isToday(d)?'today':''} ${(d.getDay()===0||d.getDay()===6)?'weekend':''}`}
+                      className={`daily-cell ${isToday(d)?'today':''}`}
                       onClick={() => {
                         if(isExp) { setExpandedCell(null); }
-                        else if(content) { setExpandedCell(cellKey); }
-                        else { setEditCell({taskId:task.id, dk}); setCellText(""); }
+                        else if(cellData) { setExpandedCell(cellKey); }
+                        else { setEditCell({taskId:task.id, dk}); setCellTitle(""); setCellText(""); }
                       }}>
-                      {content ? (
+                      {cellData ? (
                         <>
-                          {!isExp && <div className="daily-cell-content">{content.split('\n')[0]}</div>}
+                          {!isExp && (
+                            <div className="daily-cell-content">
+                              {cellData.title || cellData.content.split('\n')[0]}
+                            </div>
+                          )}
                           {isExp && (
                             <div className="cell-expanded" onClick={e=>e.stopPropagation()}>
-                              <div className="cell-expanded-text">{content}</div>
+                              {cellData.title && <div style={{fontWeight:600,fontSize:12,marginBottom:4,color:'#333'}}>{cellData.title}</div>}
+                              <div className="cell-expanded-text">{cellData.content}</div>
                               <div className="cell-expanded-actions">
-                                <button className="btn btn-outline" style={{fontSize:11,padding:'3px 10px'}} onClick={()=>{setEditCell({taskId:task.id,dk});setCellText(content);setExpandedCell(null);}}>编辑</button>
+                                <button className="btn btn-outline" style={{fontSize:11,padding:'3px 10px'}} onClick={()=>{setEditCell({taskId:task.id,dk});setCellTitle(cellData.title);setCellText(cellData.content);setExpandedCell(null);}}>编辑</button>
                                 <button className="btn" style={{fontSize:11,padding:'3px 10px',background:'#f0f0f0',color:'#999',border:'none'}} onClick={()=>setExpandedCell(null)}>收起</button>
                               </div>
                             </div>
@@ -765,16 +780,17 @@ function App() {
       </Modal>
 
       {/* Edit cell modal */}
-      <Modal open={!!editCell} onClose={()=>{setEditCell(null);setCellText("");}} title="编辑当日计划" width={380}>
+      <Modal open={!!editCell} onClose={()=>{setEditCell(null);setCellTitle("");setCellText("");}} title="编辑当日计划" width={380}>
         {editCell && <>
           <div style={{fontSize:12,color:'#999',marginBottom:10}}>
             {data.tasks.find(t=>t.id===editCell.taskId)?.name} · {editCell.dk}
           </div>
-          <Field label="今日计划内容" value={cellText} onChange={setCellText}
-            placeholder={"今天这件事要做什么？\n可以写多行，如：\n1. 上午联系冯确认报价\n2. 下午整理语料大纲"} rows={5}/>
+          <Field label="标题" value={cellTitle} onChange={setCellTitle} placeholder="一句话概括，显示在日历格中"/>
+          <Field label="详细内容" value={cellText} onChange={setCellText}
+            placeholder={"可以写多行，如：\n1. 上午联系冯确认报价\n2. 下午整理语料大纲"} rows={4}/>
           <div style={{display:'flex',gap:10}}>
             <button className="btn btn-dark" style={{flex:1,padding:11,borderRadius:10,fontSize:14}} onClick={saveCellEdit}>保存</button>
-            {cellText && <button className="btn btn-danger" style={{padding:'11px 16px',borderRadius:10,fontSize:14}} onClick={()=>{setCellText("");saveCellEdit();}}>清除</button>}
+            {(cellTitle||cellText) && <button className="btn btn-danger" style={{padding:'11px 16px',borderRadius:10,fontSize:14}} onClick={()=>{update(d=>{const t=d.tasks.find(x=>x.id===editCell.taskId);if(t)delete t.dailyActions[editCell.dk];return d;});setEditCell(null);setCellTitle("");setCellText("");}}>清除</button>}
           </div>
         </>}
       </Modal>
