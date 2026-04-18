@@ -421,6 +421,39 @@
 const { useState, useEffect, useRef, useCallback } = React;
 
 const STORAGE_KEY = "work-mgr-v2";
+const GIST_TOKEN_KEY = "work-mgr-gist-token";
+const GIST_ID_KEY = "work-mgr-gist-id";
+const GIST_FILENAME = "work-manager-data.json";
+
+async function gistCreate(token, data) {
+  const res = await fetch("https://api.github.com/gists", {
+    method: "POST",
+    headers: { Authorization: `token ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ description: "工作管理系统数据备份", public: false, files: { [GIST_FILENAME]: { content: JSON.stringify(data) } } })
+  });
+  if (!res.ok) return null;
+  const json = await res.json();
+  return json.id;
+}
+
+async function gistUpdate(token, gistId, data) {
+  const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+    method: "PATCH",
+    headers: { Authorization: `token ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ files: { [GIST_FILENAME]: { content: JSON.stringify(data) } } })
+  });
+  return res.ok;
+}
+
+async function gistLoad(token, gistId) {
+  const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+    headers: { Authorization: `token ${token}` }
+  });
+  if (!res.ok) return null;
+  const json = await res.json();
+  const raw = json.files?.[GIST_FILENAME]?.content;
+  return raw ? JSON.parse(raw) : null;
+}
 const CATEGORIES = ["项目", "商务", "技术开发", "行政", "临时任务"];
 const STATUS_OPTIONS = ["进行中", "待启动", "已完成", "已搁置"];
 const PRIORITY_OPTIONS = ["高", "中", "低"];
@@ -508,7 +541,45 @@ function App() {
   const [cellItems, setCellItems] = useState([{title:"", content:""}]);
   const [expandedCell, setExpandedCell] = useState(null);
   const [newTask, setNewTask] = useState({ name:"", category:"项目", priority:"高", responsible:"我", participants:"", deadline:"", status:"进行中" });
+  const [gistToken, setGistToken] = useState(() => localStorage.getItem(GIST_TOKEN_KEY) || "");
+  const [gistId, setGistId] = useState(() => localStorage.getItem(GIST_ID_KEY) || "");
+  const [syncStatus, setSyncStatus] = useState("idle"); // idle | syncing | ok | error
+  const [tokenInput, setTokenInput] = useState("");
+  const syncTimer = useRef(null);
   const fileRef = useRef(null);
+
+  // 启动时从 Gist 加载数据
+  useEffect(() => {
+    const token = localStorage.getItem(GIST_TOKEN_KEY);
+    const id = localStorage.getItem(GIST_ID_KEY);
+    if (!token || !id) return;
+    setSyncStatus("syncing");
+    gistLoad(token, id).then(d => {
+      if (d && d.tasks) { setData(d); saveData(d); setSyncStatus("ok"); }
+      else setSyncStatus("error");
+    }).catch(() => setSyncStatus("error"));
+  }, []);
+
+  // 数据变化时自动同步到 Gist（防抖 2s）
+  useEffect(() => {
+    const token = localStorage.getItem(GIST_TOKEN_KEY);
+    if (!token) return;
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(async () => {
+      setSyncStatus("syncing");
+      let id = localStorage.getItem(GIST_ID_KEY);
+      try {
+        if (!id) {
+          id = await gistCreate(token, data);
+          if (id) { localStorage.setItem(GIST_ID_KEY, id); setGistId(id); setSyncStatus("ok"); }
+          else setSyncStatus("error");
+        } else {
+          const ok = await gistUpdate(token, id, data);
+          setSyncStatus(ok ? "ok" : "error");
+        }
+      } catch { setSyncStatus("error"); }
+    }, 2000);
+  }, [data]);
 
   const update = useCallback(fn => {
     setData(prev => {
@@ -632,6 +703,11 @@ function App() {
         <div className="header-top">
           <h1>📋 刘昊的工作管理系统</h1>
           <div className="header-actions">
+            {gistToken && (
+              <span style={{fontSize:11,padding:'4px 8px',borderRadius:6,background:'rgba(255,255,255,0.1)',color:syncStatus==='ok'?'#6ee7b7':syncStatus==='error'?'#fca5a5':'#cbd5e1'}}>
+                {syncStatus==='ok'?'☁ 已同步':syncStatus==='syncing'?'☁ 同步中…':'☁ 同步失败'}
+              </span>
+            )}
             <button className="btn btn-ghost" onClick={()=>setShowSettings(true)}>⚙</button>
             <button className="btn btn-ghost" onClick={()=>setShowArchive(true)}>已完结</button>
             <button className="btn btn-primary" onClick={()=>setShowAdd(true)}>+ 新任务</button>
@@ -848,15 +924,68 @@ function App() {
       </Modal>
 
       {/* Settings modal */}
-      <Modal open={showSettings} onClose={()=>setShowSettings(false)} title="设置" width={380}>
+      <Modal open={showSettings} onClose={()=>setShowSettings(false)} title="设置" width={400}>
+        {/* Gist 云同步 */}
         <div className="data-section" style={{marginTop:0,paddingTop:0,borderTop:'none'}}>
-          <div className="data-section-title">数据管理</div>
-          <p style={{fontSize:12,color:'#999',marginBottom:12,lineHeight:1.5}}>
-            数据保存在当前浏览器中。换设备时，先导出数据文件，再在新设备上导入即可。
-          </p>
+          <div className="data-section-title">☁️ 云端同步</div>
+          {gistToken ? (
+            <div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                <span style={{fontSize:12,fontWeight:600,color:syncStatus==='ok'?'#22c55e':syncStatus==='error'?'#ef4444':'#999'}}>
+                  {syncStatus==='ok'?'✓ 已连接并同步':syncStatus==='syncing'?'同步中…':'✗ 同步失败，检查 Token'}
+                </span>
+              </div>
+              <div style={{display:'flex',gap:8}}>
+                <button className="btn btn-outline" style={{fontSize:12}} onClick={()=>{
+                  setSyncStatus("syncing");
+                  gistLoad(gistToken, gistId).then(d=>{
+                    if(d&&d.tasks){setData(d);saveData(d);setSyncStatus("ok");alert("已从云端恢复最新数据");}
+                    else setSyncStatus("error");
+                  }).catch(()=>setSyncStatus("error"));
+                }}>↓ 从云端恢复</button>
+                <button className="btn btn-danger" style={{fontSize:12}} onClick={()=>{
+                  if(confirm("断开后数据仅保存在本地浏览器，确定吗？")){
+                    localStorage.removeItem(GIST_TOKEN_KEY);
+                    localStorage.removeItem(GIST_ID_KEY);
+                    setGistToken(""); setGistId(""); setSyncStatus("idle");
+                  }
+                }}>断开连接</button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p style={{fontSize:12,color:'#999',marginBottom:10,lineHeight:1.6}}>
+                连接 GitHub Token 后，数据自动同步到私有 Gist，换设备也不丢失。<br/>
+                Token 仅存在本地浏览器，不会上传到任何服务器。
+              </p>
+              <div style={{display:'flex',gap:8}}>
+                <input
+                  style={{flex:1,padding:'7px 10px',border:'1.5px solid #ddd',borderRadius:8,fontSize:13,fontFamily:'inherit',outline:'none'}}
+                  type="password" placeholder="粘贴 GitHub Token（ghp_...）"
+                  value={tokenInput} onChange={e=>setTokenInput(e.target.value)}/>
+                <button className="btn btn-primary" style={{fontSize:13,whiteSpace:'nowrap'}} onClick={async ()=>{
+                  const t = tokenInput.trim();
+                  if(!t) return;
+                  setSyncStatus("syncing");
+                  try {
+                    const id = await gistCreate(t, data);
+                    if(id){
+                      localStorage.setItem(GIST_TOKEN_KEY, t);
+                      localStorage.setItem(GIST_ID_KEY, id);
+                      setGistToken(t); setGistId(id); setTokenInput(""); setSyncStatus("ok");
+                    } else { setSyncStatus("error"); alert("连接失败，请检查 Token 是否有 gist 权限"); }
+                  } catch { setSyncStatus("error"); alert("连接失败，请检查网络"); }
+                }}>连接</button>
+              </div>
+            </div>
+          )}
+        </div>
+        {/* 本地数据管理 */}
+        <div className="data-section">
+          <div className="data-section-title">本地数据</div>
           <div className="data-actions">
-            <button className="btn btn-primary" onClick={exportData}>📤 导出数据</button>
-            <button className="btn btn-outline" onClick={()=>fileRef.current?.click()}>📥 导入数据</button>
+            <button className="btn btn-primary" onClick={exportData}>📤 导出</button>
+            <button className="btn btn-outline" onClick={()=>fileRef.current?.click()}>📥 导入</button>
             <button className="btn btn-danger" onClick={resetData}>🗑 重置</button>
           </div>
           <input ref={fileRef} type="file" accept=".json" style={{display:'none'}} onChange={importData}/>
