@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>工作管理系统</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+  
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  :root {
+    --bg: #f0f2f5;
+    --header-bg: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    --card-bg: #fff;
+    --text-primary: #1a1a2e;
+    --text-secondary: #666;
+    --text-muted: #999;
+    --border: #e8e8e8;
+    --border-light: #f0f0f0;
+    --accent: #4a90d9;
+    --today-bg: #f0f5ff;
+    --today-border: #4a90d9;
+    --weekend-bg: #fafafa;
+    --cat-project: #C05046;
+    --cat-business: #2E75B6;
+    --cat-tech: #548235;
+    --cat-admin: #7030A0;
+    --cat-temp: #BF8F00;
+    --priority-high: #ef4444;
+    --priority-mid: #f59e0b;
+    --priority-low: #22c55e;
+    --status-active: #2E75B6;
+    --status-pending: #999;
+    --status-done: #22c55e;
+  }
+
+  body {
+    font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  .header {
+    background: var(--header-bg);
+    padding: 14px 20px 12px;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .header h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+  .header-actions { display: flex; gap: 7px; }
+  .btn {
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+    padding: 6px 13px;
+    font-weight: 500;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-ghost { background: rgba(255,255,255,0.12); color: #ccc; }
+  .btn-primary { background: var(--accent); color: #fff; font-weight: 600; }
+  .btn-dark { background: var(--text-primary); color: #fff; font-weight: 600; }
+  .btn-danger { background: #fee; color: #e53e3e; border: 1px solid #fcc; }
+  .btn-success { background: #22c55e; color: #fff; }
+  .btn-outline { background: #fff; color: var(--text-secondary); border: 1px solid #ddd; }
+  .btn-block { width: 100%; padding: 11px; font-size: 15px; margin-top: 6px; border-radius: 10px; }
+
+  /* Week nav */
+  .week-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .week-nav button {
+    background: rgba(255,255,255,0.1);
+    border: none;
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+  }
+  .week-nav button:hover { background: rgba(255,255,255,0.2); }
+  .week-info { text-align: center; font-size: 14px; opacity: 0.9; }
+  .badge-week {
+    margin-left: 8px;
+    font-size: 11px;
+    background: var(--accent);
+    padding: 1px 8px;
+    border-radius: 10px;
+  }
+  .btn-today {
+    font-size: 12px;
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-right: 6px;
+  }
+
+  /* Filter bar */
+  .filter-bar {
+    display: flex;
+    gap: 6px;
+    padding: 10px 16px;
+    overflow-x: auto;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .filter-btn {
+    padding: 4px 13px;
+    border-radius: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-weight: 500;
+    transition: all 0.2s;
+    border: 1px solid #ddd;
+    background: #fff;
+    color: var(--text-secondary);
+    font-family: inherit;
+  }
+  .filter-btn.active {
+    border: none;
+    color: #fff;
+  }
+
+  /* Main grid */
+  .main-area {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+  }
+  .grid-container {
+    display: grid;
+    grid-template-columns: minmax(150px, 200px) repeat(7, minmax(105px, 1fr));
+    min-width: 900px;
+  }
+
+  /* Day headers */
+  .day-header-row {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: minmax(150px, 200px) repeat(7, minmax(105px, 1fr));
+    background: var(--card-bg);
+    border-bottom: 2px solid #e0e0e0;
+    min-width: 900px;
+  }
+  .corner-cell {
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+    border-right: 1px solid #eee;
+    display: flex;
+    align-items: center;
+  }
+  .day-cell {
+    padding: 8px 6px;
+    text-align: center;
+    border-right: 1px solid #eee;
+  }
+  .day-cell.today { background: #e8f0fe; }
+  .day-cell.weekend { background: var(--weekend-bg); }
+  .day-label { font-size: 11px; font-weight: 500; color: var(--text-muted); }
+  .day-cell.today .day-label { color: #1a73e8; font-weight: 700; }
+  .day-cell.weekend .day-label { color: #bbb; }
+  .day-num { font-size: 15px; font-weight: 700; color: #333; }
+  .day-cell.today .day-num { color: #1a73e8; }
+  .day-cell.weekend .day-num { color: #bbb; }
+
+  /* Category header */
+  .cat-header {
+    grid-column: 1 / -1;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  /* Task row */
+  .task-row {
+    display: grid;
+    grid-template-columns: minmax(150px, 200px) repeat(7, minmax(105px, 1fr));
+    border-bottom: 1px solid var(--border-light);
+    min-height: 54px;
+    min-width: 900px;
+  }
+
+  /* Task info cell */
+  .task-info {
+    padding: 8px 10px;
+    border-right: 1px solid #eee;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    background: var(--card-bg);
+    border-left: 3px solid #999;
+    transition: background 0.15s;
+  }
+  .task-info:hover { background: #f8f9ff; }
+  .task-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+    word-break: break-all;
+  }
+  .task-meta { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .task-people { font-size: 10px; color: #aaa; }
+
+  /* Badges */
+  .badge {
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    line-height: 1.5;
+  }
+  .badge-sm { font-size: 10px; padding: 0px 4px; font-weight: 500; }
+  .badge-priority-high { background: #fde8e8; color: var(--priority-high); }
+  .badge-priority-mid { background: #fef3cd; color: var(--priority-mid); }
+  .badge-priority-low { background: #d4edda; color: var(--priority-low); }
+  .badge-status-active { background: #dce8f5; color: var(--status-active); }
+  .badge-status-pending { background: #eee; color: var(--status-pending); }
+  .badge-status-done { background: #d4edda; color: var(--status-done); }
+  .badge-deadline { font-size: 10px; color: var(--text-muted); }
+
+  /* Daily cell */
+  .daily-cell {
+    padding: 6px 7px;
+    border-right: 1px solid var(--border-light);
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1.4;
+    background: var(--card-bg);
+    position: relative;
+    min-height: 48px;
+    transition: background 0.15s;
+  }
+  .daily-cell.today { background: var(--today-bg); }
+  .daily-cell.weekend { background: var(--weekend-bg); }
+  .daily-cell:hover { background: #f5f5f5; }
+  .daily-cell.today:hover { background: #e5edff; }
+  .daily-cell-empty {
+    color: #ccc;
+    font-size: 18px;
+    text-align: center;
+    line-height: 36px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .daily-cell-content {
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  /* Expanded cell overlay */
+  .cell-expanded {
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    right: -1px;
+    z-index: 20;
+    background: #fff;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    padding: 10px;
+    min-height: 90px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  }
+  .cell-expanded-text {
+    font-size: 12px;
+    color: #333;
+    white-space: pre-wrap;
+    line-height: 1.5;
+    margin-bottom: 8px;
+  }
+  .cell-expanded-actions { display: flex; gap: 6px; }
+
+  /* Empty state */
+  .empty-state {
+    padding: 40px;
+    text-align: center;
+    color: #bbb;
+    font-size: 14px;
+    grid-column: 1 / -1;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .modal-box {
+    background: #fff;
+    border-radius: 14px;
+    width: 420px;
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  }
+  .modal-header {
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-title { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #999;
+    padding: 0 4px;
+    line-height: 1;
+  }
+  .modal-body { padding: 16px 22px 22px; }
+
+  /* Form fields */
+  .field { margin-bottom: 14px; }
+  .field-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    display: block;
+  }
+  .field-input, .field-select, .field-textarea {
+    width: 100%;
+    padding: 8px 11px;
+    border: 1.5px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+  }
+  .field-input:focus, .field-textarea:focus { border-color: var(--accent); }
+  .field-select { background: #fafafa; }
+  .field-textarea { resize: vertical; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* Archive item */
+  .archive-item {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .archive-name { font-size: 14px; font-weight: 600; color: #333; }
+  .archive-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .archive-actions { display: flex; gap: 6px; }
+
+  /* Data management section in modal */
+  .data-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #eee;
+  }
+  .data-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+  }
+  .data-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .data-actions .btn { font-size: 12px; padding: 6px 12px; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .header { padding: 12px 14px 10px; }
+    .header h1 { font-size: 16px; }
+    .btn { font-size: 12px; padding: 5px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const STORAGE_KEY = "work-mgr-v2";
+const CATEGORIES = ["项目", "商务", "技术开发", "行政", "临时任务"];
+const STATUS_OPTIONS = ["进行中", "待启动", "已完成", "已搁置"];
+const PRIORITY_OPTIONS = ["高", "中", "低"];
+const CAT_COLORS = { "项目":"#C05046", "商务":"#2E75B6", "技术开发":"#548235", "行政":"#7030A0", "临时任务":"#BF8F00" };
+const catColor = c => CAT_COLORS[c] || "#64748b";
+
+const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const getMonday = d => { const dt = new Date(d); const day = dt.getDay(); dt.setDate(dt.getDate() - day + (day===0?-6:1)); dt.setHours(0,0,0,0); return dt; };
+const fmtDate = d => `${d.getMonth()+1}/${d.getDate()}`;
+const dayLabel = d => `周${"日一二三四五六"[d.getDay()]}`;
+const isToday = d => { const t=new Date(); return d.getFullYear()===t.getFullYear()&&d.getMonth()===t.getMonth()&&d.getDate()===t.getDate(); };
+const dateKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+const defaultData = () => ({
+  tasks: [
+    { id:genId(), name:"朝天宫项目-语料编写", category:"项目", status:"进行中", priority:"高", responsible:"我", participants:"邵颖团队", deadline:"4/24", dailyActions:{} },
+    { id:genId(), name:"朝天宫项目-素材采集", category:"项目", status:"待启动", priority:"高", responsible:"于帆", participants:"rokid李源", deadline:"4/24", dailyActions:{} },
+    { id:genId(), name:"rokid合作模式谈判", category:"商务", status:"进行中", priority:"高", responsible:"我", participants:"冯", deadline:"本周五", dailyActions:{} },
+    { id:genId(), name:"工信商务消化", category:"商务", status:"进行中", priority:"高", responsible:"我", participants:"", deadline:"持续", dailyActions:{} },
+    { id:genId(), name:"三台机器人对接", category:"技术开发", status:"进行中", priority:"中", responsible:"我", participants:"南大", deadline:"持续", dailyActions:{} },
+    { id:genId(), name:"知识库维护", category:"技术开发", status:"进行中", priority:"中", responsible:"我", participants:"", deadline:"持续", dailyActions:{} },
+    { id:genId(), name:"书记盯办事项", category:"行政", status:"进行中", priority:"高", responsible:"我", participants:"", deadline:"", dailyActions:{} },
+  ],
+  archivedTasks: []
+});
+
+function loadData() {
+  try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : defaultData(); }
+  catch { return defaultData(); }
+}
+function saveData(d) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch(e) { console.error(e); }
+}
+
+function PBadge({p, small}) {
+  const cls = p==="高"?"badge-priority-high":p==="中"?"badge-priority-mid":"badge-priority-low";
+  return <span className={`badge ${small?'badge-sm':''} ${cls}`}>{p}</span>;
+}
+function SBadge({s, small}) {
+  const cls = s==="进行中"?"badge-status-active":s==="已完成"?"badge-status-done":"badge-status-pending";
+  return <span className={`badge ${small?'badge-sm':''} ${cls}`}>{s}</span>;
+}
+
+function Modal({open, onClose, title, width, children}) {
+  if (!open) return null;
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" style={{width:width||420}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">{title}</span>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Field({label, value, onChange, placeholder, options, rows}) {
+  return (
+    <div className="field">
+      <label className="field-label">{label}</label>
+      {options ? (
+        <select className="field-select" value={value} onChange={e=>onChange(e.target.value)}>
+          {options.map(o=><option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : rows ? (
+        <textarea className="field-textarea" value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}/>
+      ) : (
+        <input className="field-input" value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}/>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  const [data, setData] = useState(loadData);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [filterCat, setFilterCat] = useState("全部");
+  const [showAdd, setShowAdd] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [editTask, setEditTask] = useState(null);
+  const [editCell, setEditCell] = useState(null);
+  const [cellText, setCellText] = useState("");
+  const [expandedCell, setExpandedCell] = useState(null);
+  const [newTask, setNewTask] = useState({ name:"", category:"项目", priority:"高", responsible:"我", participants:"", deadline:"", status:"进行中" });
+  const fileRef = useRef(null);
+
+  const update = useCallback(fn => {
+    setData(prev => {
+      const next = fn(JSON.parse(JSON.stringify(prev)));
+      saveData(next);
+      return next;
+    });
+  }, []);
+
+  // Week days
+  const monday = getMonday(new Date());
+  monday.setDate(monday.getDate() + weekOffset * 7);
+  const days = Array.from({length:7}, (_,i) => { const d=new Date(monday); d.setDate(d.getDate()+i); return d; });
+  const isCurrentWeek = weekOffset === 0;
+
+  // Filter
+  const filtered = filterCat==="全部" ? data.tasks : data.tasks.filter(t=>t.category===filterCat);
+  const grouped = {};
+  filtered.forEach(t => { if(!grouped[t.category]) grouped[t.category]=[]; grouped[t.category].push(t); });
+
+  const addTask = () => {
+    if (!newTask.name.trim()) return;
+    update(d => { d.tasks.push({...newTask, id:genId(), dailyActions:{}}); return d; });
+    setNewTask({ name:"", category:"项目", priority:"高", responsible:"我", participants:"", deadline:"", status:"进行中" });
+    setShowAdd(false);
+  };
+
+  const archiveTask = id => {
+    update(d => {
+      const idx = d.tasks.findIndex(t=>t.id===id);
+      if(idx>-1) { d.archivedTasks.unshift({...d.tasks[idx], status:"已完成", archivedAt:new Date().toISOString()}); d.tasks.splice(idx,1); }
+      return d;
+    });
+    setEditTask(null);
+  };
+
+  const restoreTask = id => {
+    update(d => {
+      const idx = d.archivedTasks.findIndex(t=>t.id===id);
+      if(idx>-1) { const t={...d.archivedTasks[idx], status:"进行中"}; delete t.archivedAt; d.tasks.push(t); d.archivedTasks.splice(idx,1); }
+      return d;
+    });
+  };
+
+  const deleteTask = (id, archived) => {
+    update(d => { if(archived) d.archivedTasks=d.archivedTasks.filter(t=>t.id!==id); else d.tasks=d.tasks.filter(t=>t.id!==id); return d; });
+    setEditTask(null);
+  };
+
+  const saveCellEdit = () => {
+    if(!editCell) return;
+    update(d => {
+      const t = d.tasks.find(x=>x.id===editCell.taskId);
+      if(t) { if(cellText.trim()) t.dailyActions[editCell.dk]=cellText.trim(); else delete t.dailyActions[editCell.dk]; }
+      return d;
+    });
+    setEditCell(null); setCellText("");
+  };
+
+  const saveTaskEdit = () => {
+    if(!editTask) return;
+    update(d => { const idx=d.tasks.findIndex(t=>t.id===editTask.id); if(idx>-1) d.tasks[idx]={...d.tasks[idx],...editTask}; return d; });
+    setEditTask(null);
+  };
+
+  // Export / Import
+  const exportData = () => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `work-mgr-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importData = e => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const imported = JSON.parse(ev.target.result);
+        if(imported.tasks && imported.archivedTasks) {
+          setData(imported);
+          saveData(imported);
+          alert('数据导入成功！');
+          setShowSettings(false);
+        } else { alert('文件格式不正确'); }
+      } catch { alert('文件解析失败'); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const resetData = () => {
+    if(confirm('确定要重置所有数据吗？此操作不可恢复。')) {
+      const d = defaultData();
+      setData(d);
+      saveData(d);
+      setShowSettings(false);
+    }
+  };
+
+  return (
+    <>
+      {/* Header */}
+      <div className="header">
+        <div className="header-top">
+          <h1>📋 工作管理</h1>
+          <div className="header-actions">
+            <button className="btn btn-ghost" onClick={()=>setShowSettings(true)}>⚙</button>
+            <button className="btn btn-ghost" onClick={()=>setShowArchive(true)}>已完结</button>
+            <button className="btn btn-primary" onClick={()=>setShowAdd(true)}>+ 新任务</button>
+          </div>
+        </div>
+        <div className="week-nav">
+          <button onClick={()=>setWeekOffset(w=>w-1)}>‹</button>
+          <div className="week-info">
+            {fmtDate(days[0])} — {fmtDate(days[6])}
+            {isCurrentWeek && <span className="badge-week">本周</span>}
+          </div>
+          <div style={{display:'flex',gap:6}}>
+            {!isCurrentWeek && <button className="btn-today" onClick={()=>setWeekOffset(0)}>今天</button>}
+            <button onClick={()=>setWeekOffset(w=>w+1)}>›</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter */}
+      <div className="filter-bar">
+        {["全部",...CATEGORIES].map(c => (
+          <button key={c} className={`filter-btn ${filterCat===c?'active':''}`}
+            style={filterCat===c ? {background:c==="全部"?"#1a1a2e":catColor(c), borderColor:'transparent'} : {}}
+            onClick={()=>setFilterCat(c)}>{c}</button>
+        ))}
+      </div>
+
+      {/* Main */}
+      <div className="main-area">
+        {/* Day headers */}
+        <div className="day-header-row">
+          <div className="corner-cell">事项 ({filtered.length})</div>
+          {days.map(d => (
+            <div key={d.toISOString()} className={`day-cell ${isToday(d)?'today':''} ${(d.getDay()===0||d.getDay()===6)?'weekend':''}`}>
+              <div className="day-label">{dayLabel(d)}</div>
+              <div className="day-num">{d.getDate()}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Task rows */}
+        {Object.entries(grouped).map(([cat, tasks]) => (
+          <React.Fragment key={cat}>
+            <div className="grid-container">
+              <div className="cat-header" style={{background:catColor(cat)+'12', borderLeft:`3px solid ${catColor(cat)}`, color:catColor(cat)}}>
+                {cat}（{tasks.length}）
+              </div>
+            </div>
+            {tasks.map(task => (
+              <div key={task.id} className="task-row">
+                <div className="task-info" style={{borderLeftColor:catColor(task.category)}} onClick={()=>setEditTask({...task})}>
+                  <div className="task-name">{task.name}</div>
+                  <div className="task-meta">
+                    <PBadge p={task.priority} small/>
+                    <SBadge s={task.status} small/>
+                    {task.deadline && <span className="badge-deadline">截止:{task.deadline}</span>}
+                  </div>
+                  {task.responsible && <div className="task-people">{task.responsible}{task.participants?` · ${task.participants}`:''}</div>}
+                </div>
+                {days.map(d => {
+                  const dk = dateKey(d);
+                  const content = task.dailyActions[dk] || "";
+                  const cellKey = `${task.id}-${dk}`;
+                  const isExp = expandedCell === cellKey;
+                  return (
+                    <div key={dk}
+                      className={`daily-cell ${isToday(d)?'today':''} ${(d.getDay()===0||d.getDay()===6)?'weekend':''}`}
+                      onClick={() => {
+                        if(isExp) { setExpandedCell(null); }
+                        else if(content) { setExpandedCell(cellKey); }
+                        else { setEditCell({taskId:task.id, dk}); setCellText(""); }
+                      }}>
+                      {content ? (
+                        <>
+                          {!isExp && <div className="daily-cell-content">{content.split('\n')[0]}</div>}
+                          {isExp && (
+                            <div className="cell-expanded" onClick={e=>e.stopPropagation()}>
+                              <div className="cell-expanded-text">{content}</div>
+                              <div className="cell-expanded-actions">
+                                <button className="btn btn-outline" style={{fontSize:11,padding:'3px 10px'}} onClick={()=>{setEditCell({taskId:task.id,dk});setCellText(content);setExpandedCell(null);}}>编辑</button>
+                                <button className="btn" style={{fontSize:11,padding:'3px 10px',background:'#f0f0f0',color:'#999',border:'none'}} onClick={()=>setExpandedCell(null)}>收起</button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="daily-cell-empty">+</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </React.Fragment>
+        ))}
+        {filtered.length===0 && <div style={{padding:40,textAlign:'center',color:'#bbb',fontSize:14,minWidth:900}}>暂无任务，点击右上角"+ 新任务"添加</div>}
+      </div>
+
+      {/* Add modal */}
+      <Modal open={showAdd} onClose={()=>setShowAdd(false)} title="添加新任务">
+        <Field label="任务名称" value={newTask.name} onChange={v=>setNewTask(p=>({...p,name:v}))} placeholder="如：朝天宫项目-现场测试"/>
+        <div className="field-row">
+          <Field label="分类" value={newTask.category} onChange={v=>setNewTask(p=>({...p,category:v}))} options={CATEGORIES}/>
+          <Field label="优先级" value={newTask.priority} onChange={v=>setNewTask(p=>({...p,priority:v}))} options={PRIORITY_OPTIONS}/>
+        </div>
+        <div className="field-row">
+          <Field label="负责人" value={newTask.responsible} onChange={v=>setNewTask(p=>({...p,responsible:v}))} placeholder="谁负责"/>
+          <Field label="参与人" value={newTask.participants} onChange={v=>setNewTask(p=>({...p,participants:v}))} placeholder="协作方"/>
+        </div>
+        <div className="field-row">
+          <Field label="截止时间" value={newTask.deadline} onChange={v=>setNewTask(p=>({...p,deadline:v}))} placeholder="如 5/17"/>
+          <Field label="状态" value={newTask.status} onChange={v=>setNewTask(p=>({...p,status:v}))} options={STATUS_OPTIONS}/>
+        </div>
+        <button className="btn btn-dark btn-block" onClick={addTask}>添加</button>
+      </Modal>
+
+      {/* Edit task modal */}
+      <Modal open={!!editTask} onClose={()=>setEditTask(null)} title="编辑任务">
+        {editTask && <>
+          <Field label="任务名称" value={editTask.name} onChange={v=>setEditTask(p=>({...p,name:v}))}/>
+          <div className="field-row">
+            <Field label="分类" value={editTask.category} onChange={v=>setEditTask(p=>({...p,category:v}))} options={CATEGORIES}/>
+            <Field label="优先级" value={editTask.priority} onChange={v=>setEditTask(p=>({...p,priority:v}))} options={PRIORITY_OPTIONS}/>
+          </div>
+          <div className="field-row">
+            <Field label="负责人" value={editTask.responsible} onChange={v=>setEditTask(p=>({...p,responsible:v}))}/>
+            <Field label="参与人" value={editTask.participants} onChange={v=>setEditTask(p=>({...p,participants:v}))}/>
+          </div>
+          <div className="field-row">
+            <Field label="截止时间" value={editTask.deadline} onChange={v=>setEditTask(p=>({...p,deadline:v}))}/>
+            <Field label="状态" value={editTask.status} onChange={v=>setEditTask(p=>({...p,status:v}))} options={STATUS_OPTIONS}/>
+          </div>
+          <div style={{display:'flex',gap:10,marginTop:10}}>
+            <button className="btn btn-dark" style={{flex:1,padding:11,borderRadius:10,fontSize:14}} onClick={saveTaskEdit}>保存</button>
+            <button className="btn btn-success" style={{padding:'11px 16px',borderRadius:10,fontSize:14}} onClick={()=>archiveTask(editTask.id)}>完结归档</button>
+            <button className="btn btn-danger" style={{padding:'11px 16px',borderRadius:10,fontSize:14}} onClick={()=>deleteTask(editTask.id,false)}>删除</button>
+          </div>
+        </>}
+      </Modal>
+
+      {/* Edit cell modal */}
+      <Modal open={!!editCell} onClose={()=>{setEditCell(null);setCellText("");}} title="编辑当日计划" width={380}>
+        {editCell && <>
+          <div style={{fontSize:12,color:'#999',marginBottom:10}}>
+            {data.tasks.find(t=>t.id===editCell.taskId)?.name} · {editCell.dk}
+          </div>
+          <Field label="今日计划内容" value={cellText} onChange={setCellText}
+            placeholder={"今天这件事要做什么？\n可以写多行，如：\n1. 上午联系冯确认报价\n2. 下午整理语料大纲"} rows={5}/>
+          <div style={{display:'flex',gap:10}}>
+            <button className="btn btn-dark" style={{flex:1,padding:11,borderRadius:10,fontSize:14}} onClick={saveCellEdit}>保存</button>
+            {cellText && <button className="btn btn-danger" style={{padding:'11px 16px',borderRadius:10,fontSize:14}} onClick={()=>{setCellText("");saveCellEdit();}}>清除</button>}
+          </div>
+        </>}
+      </Modal>
+
+      {/* Archive modal */}
+      <Modal open={showArchive} onClose={()=>setShowArchive(false)} title={`已完结任务 (${data.archivedTasks.length})`} width={440}>
+        {data.archivedTasks.length===0 ? (
+          <div style={{padding:20,textAlign:'center',color:'#bbb'}}>暂无已完结任务</div>
+        ) : (
+          <div style={{maxHeight:'60vh',overflow:'auto'}}>
+            {data.archivedTasks.map(t => (
+              <div key={t.id} className="archive-item">
+                <div>
+                  <div className="archive-name">{t.name}</div>
+                  <div className="archive-meta">{t.category} · 归档于 {t.archivedAt?new Date(t.archivedAt).toLocaleDateString():""}</div>
+                </div>
+                <div className="archive-actions">
+                  <button className="btn btn-outline" style={{fontSize:12,padding:'4px 10px',borderRadius:6}} onClick={()=>restoreTask(t.id)}>恢复</button>
+                  <button className="btn btn-danger" style={{fontSize:12,padding:'4px 10px',borderRadius:6}} onClick={()=>deleteTask(t.id,true)}>删除</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      {/* Settings modal */}
+      <Modal open={showSettings} onClose={()=>setShowSettings(false)} title="设置" width={380}>
+        <div className="data-section" style={{marginTop:0,paddingTop:0,borderTop:'none'}}>
+          <div className="data-section-title">数据管理</div>
+          <p style={{fontSize:12,color:'#999',marginBottom:12,lineHeight:1.5}}>
+            数据保存在当前浏览器中。换设备时，先导出数据文件，再在新设备上导入即可。
+          </p>
+          <div className="data-actions">
+            <button className="btn btn-primary" onClick={exportData}>📤 导出数据</button>
+            <button className="btn btn-outline" onClick={()=>fileRef.current?.click()}>📥 导入数据</button>
+            <button className="btn btn-danger" onClick={resetData}>🗑 重置</button>
+          </div>
+          <input ref={fileRef} type="file" accept=".json" style={{display:'none'}} onChange={importData}/>
+        </div>
+        <div className="data-section">
+          <div className="data-section-title">使用说明</div>
+          <div style={{fontSize:12,color:'#666',lineHeight:1.8}}>
+            <p>• 点击左侧任务名 → 编辑任务信息或完结归档</p>
+            <p>• 点击格子中的 + → 填写当天计划</p>
+            <p>• 点击已填内容 → 展开查看详情</p>
+            <p>• 顶部分类标签 → 筛选特定类别</p>
+            <p>• 左右箭头 → 切换周</p>
+          </div>
+        </div>
+      </Modal>
+
+      <input ref={fileRef} type="file" accept=".json" style={{display:'none'}} onChange={importData}/>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('app')).render(<App/>);
+</script>
+</body>
+</html>
