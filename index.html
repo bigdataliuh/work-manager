@@ -199,7 +199,6 @@
     display: grid;
     grid-template-columns: minmax(150px, 200px) repeat(7, minmax(105px, 1fr));
     border-bottom: 1px solid var(--border-light);
-    min-height: 54px;
     min-width: 900px;
   }
 
@@ -252,7 +251,7 @@
     line-height: 1.4;
     background: var(--card-bg);
     position: relative;
-    min-height: 48px;
+    min-height: 44px;
     transition: background 0.15s;
   }
   .daily-cell.today { background: var(--today-bg); }
@@ -547,6 +546,8 @@ function App() {
   const [tokenInput, setTokenInput] = useState("");
   const syncTimer = useRef(null);
   const fileRef = useRef(null);
+  const mainAreaRef = useRef(null);
+  const todayColRef = useRef(null);
 
   // 启动时从 Gist 加载数据
   useEffect(() => {
@@ -651,6 +652,21 @@ function App() {
     setEditCell(null); setCellItems([{title:"", content:""}]);
   };
 
+  const scrollToToday = () => {
+    if (weekOffset !== 0) { setWeekOffset(0); setTimeout(() => todayColRef.current?.scrollIntoView({behavior:'smooth', block:'nearest', inline:'center'}), 100); }
+    else { todayColRef.current?.scrollIntoView({behavior:'smooth', block:'nearest', inline:'center'}); }
+  };
+
+  const toggleItemDone = (taskId, dk, idx) => {
+    update(d => {
+      const t = d.tasks.find(x => x.id === taskId);
+      if(t && Array.isArray(t.dailyActions[dk])) {
+        t.dailyActions[dk][idx].done = !t.dailyActions[dk][idx].done;
+      }
+      return d;
+    });
+  };
+
   const saveTaskEdit = () => {
     if(!editTask) return;
     update(d => { const idx=d.tasks.findIndex(t=>t.id===editTask.id); if(idx>-1) d.tasks[idx]={...d.tasks[idx],...editTask}; return d; });
@@ -720,7 +736,7 @@ function App() {
             {isCurrentWeek && <span className="badge-week">本周</span>}
           </div>
           <div style={{display:'flex',gap:6}}>
-            {!isCurrentWeek && <button className="btn-today" onClick={()=>setWeekOffset(0)}>今天</button>}
+            <button className="btn-today" onClick={scrollToToday}>今日</button>
             <button onClick={()=>setWeekOffset(w=>w+1)}>›</button>
           </div>
         </div>
@@ -736,12 +752,12 @@ function App() {
       </div>
 
       {/* Main */}
-      <div className="main-area">
+      <div className="main-area" ref={mainAreaRef}>
         {/* Day headers */}
         <div className="day-header-row">
           <div className="corner-cell">事项 ({filtered.length})</div>
           {days.map(d => (
-            <div key={d.toISOString()} className={`day-cell ${isToday(d)?'today':''} ${(d.getDay()===0||d.getDay()===6)?'weekend':''}`}>
+            <div key={d.toISOString()} ref={isToday(d)?todayColRef:null} className={`day-cell ${isToday(d)?'today':''}`}>
               <div className="day-label">{dayLabel(d)}</div>
               <div className="day-num">{d.getDate()}</div>
             </div>
@@ -783,11 +799,16 @@ function App() {
                       {items ? (
                         <>
                           {!isExp && (
-                            <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                            <div style={{display:'flex',flexDirection:'column',gap:3}}>
                               {items.map((it,i)=>(
-                                <div key={i} style={{fontSize:12,color:'#333',lineHeight:1.4,display:'flex',alignItems:'baseline',gap:3}}>
-                                  {items.length>1 && <span style={{fontSize:10,color:'#aaa',flexShrink:0}}>{i+1}.</span>}
-                                  <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.title||it.content.split('\n')[0]}</span>
+                                <div key={i} style={{display:'flex',alignItems:'center',gap:4}}>
+                                  <span onClick={e=>{e.stopPropagation();toggleItemDone(task.id,dk,i);}}
+                                    style={{flexShrink:0,width:14,height:14,borderRadius:3,border:`1.5px solid ${it.done?'#22c55e':'#ccc'}`,background:it.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+                                    {it.done && <span style={{color:'#fff',fontSize:10,lineHeight:1}}>✓</span>}
+                                  </span>
+                                  <span style={{fontSize:12,lineHeight:1.4,color:it.done?'#aaa':'#333',textDecoration:it.done?'line-through':'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                                    {it.title||it.content.split('\n')[0]}
+                                  </span>
                                 </div>
                               ))}
                             </div>
@@ -795,9 +816,15 @@ function App() {
                           {isExp && (
                             <div className="cell-expanded" onClick={e=>e.stopPropagation()}>
                               {items.map((it,i)=>(
-                                <div key={i} style={{marginBottom: i<items.length-1?10:0}}>
-                                  {it.title && <div style={{fontWeight:600,fontSize:12,color:'#333',marginBottom:2}}>{it.title}</div>}
-                                  {it.content && <div className="cell-expanded-text" style={{marginBottom:0}}>{it.content}</div>}
+                                <div key={i} style={{display:'flex',alignItems:'flex-start',gap:6,marginBottom:i<items.length-1?10:0}}>
+                                  <span onClick={()=>toggleItemDone(task.id,dk,i)}
+                                    style={{flexShrink:0,marginTop:2,width:14,height:14,borderRadius:3,border:`1.5px solid ${it.done?'#22c55e':'#ccc'}`,background:it.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+                                    {it.done && <span style={{color:'#fff',fontSize:10,lineHeight:1}}>✓</span>}
+                                  </span>
+                                  <div style={{opacity:it.done?0.5:1}}>
+                                    {it.title && <div style={{fontWeight:600,fontSize:12,color:'#333',marginBottom:2,textDecoration:it.done?'line-through':'none'}}>{it.title}</div>}
+                                    {it.content && <div className="cell-expanded-text" style={{marginBottom:0}}>{it.content}</div>}
+                                  </div>
                                 </div>
                               ))}
                               <div className="cell-expanded-actions" style={{marginTop:8}}>
