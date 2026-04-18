@@ -454,10 +454,10 @@ async function gistLoad(token, gistId) {
   const raw = json.files?.[GIST_FILENAME]?.content;
   return raw ? JSON.parse(raw) : null;
 }
-const CATEGORIES = ["项目", "商务", "技术开发", "行政", "临时任务"];
+const CATEGORIES = ["项目", "活动", "商务", "开发", "临时任务"];
 const STATUS_OPTIONS = ["进行中", "待启动", "已完成", "已搁置"];
 const PRIORITY_OPTIONS = ["高", "中", "低"];
-const CAT_COLORS = { "项目":"#C05046", "商务":"#2E75B6", "技术开发":"#548235", "行政":"#7030A0", "临时任务":"#BF8F00" };
+const CAT_COLORS = { "项目":"#C05046", "活动":"#7030A0", "商务":"#2E75B6", "开发":"#548235", "临时任务":"#BF8F00" };
 const catColor = c => CAT_COLORS[c] || "#64748b";
 
 const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
@@ -473,9 +473,9 @@ const defaultData = () => ({
     { id:genId(), name:"朝天宫项目-素材采集", category:"项目", status:"待启动", priority:"高", responsible:"于帆", participants:"rokid李源", deadline:"4/24", dailyActions:{} },
     { id:genId(), name:"rokid合作模式谈判", category:"商务", status:"进行中", priority:"高", responsible:"我", participants:"冯", deadline:"本周五", dailyActions:{} },
     { id:genId(), name:"工信商务消化", category:"商务", status:"进行中", priority:"高", responsible:"我", participants:"", deadline:"持续", dailyActions:{} },
-    { id:genId(), name:"三台机器人对接", category:"技术开发", status:"进行中", priority:"中", responsible:"我", participants:"南大", deadline:"持续", dailyActions:{} },
-    { id:genId(), name:"知识库维护", category:"技术开发", status:"进行中", priority:"中", responsible:"我", participants:"", deadline:"持续", dailyActions:{} },
-    { id:genId(), name:"书记盯办事项", category:"行政", status:"进行中", priority:"高", responsible:"我", participants:"", deadline:"", dailyActions:{} },
+    { id:genId(), name:"三台机器人对接", category:"开发", status:"进行中", priority:"中", responsible:"我", participants:"南大", deadline:"持续", dailyActions:{} },
+    { id:genId(), name:"知识库维护", category:"开发", status:"进行中", priority:"中", responsible:"我", participants:"", deadline:"持续", dailyActions:{} },
+    { id:genId(), name:"书记盯办事项", category:"临时任务", status:"进行中", priority:"高", responsible:"我", participants:"", deadline:"", dailyActions:{} },
   ],
   archivedTasks: []
 });
