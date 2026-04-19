@@ -40,7 +40,10 @@
     font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
     background: var(--bg);
     color: var(--text-primary);
-    min-height: 100vh;
+  }
+
+  #app {
+    height: 100vh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -410,8 +413,9 @@
   /* Mobile view */
   .mobile-day-strip {
     display: flex;
-    gap: 8px;
-    padding: 10px 14px;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 12px;
     overflow-x: auto;
     background: var(--card-bg);
     border-bottom: 1px solid var(--border);
@@ -424,70 +428,70 @@
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    padding: 6px 10px;
+    padding: 7px 0;
     border-radius: 12px;
     cursor: pointer;
-    flex-shrink: 0;
-    min-width: 44px;
+    flex: 1;
+    min-width: 40px;
     border: 1.5px solid transparent;
     transition: all 0.15s;
   }
   .mobile-day-chip.active { background: var(--accent); border-color: var(--accent); }
   .mobile-day-chip.today-chip:not(.active) { border-color: var(--accent); }
   .mobile-day-chip-label { font-size: 10px; font-weight: 500; color: var(--text-muted); }
-  .mobile-day-chip.active .mobile-day-chip-label { color: rgba(255,255,255,0.8); }
-  .mobile-day-chip-num { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+  .mobile-day-chip.active .mobile-day-chip-label,
+  .mobile-day-chip.today-chip:not(.active) .mobile-day-chip-label { color: var(--accent); }
+  .mobile-day-chip.active .mobile-day-chip-label { color: rgba(255,255,255,0.85); }
+  .mobile-day-chip-num { font-size: 17px; font-weight: 700; color: var(--text-primary); }
   .mobile-day-chip.active .mobile-day-chip-num { color: #fff; }
   .mobile-day-chip.today-chip:not(.active) .mobile-day-chip-num { color: var(--accent); }
 
   .mobile-task-list {
     flex: 1;
     overflow-y: auto;
-    padding: 12px 14px;
+    -webkit-overflow-scrolling: touch;
+    padding: 14px 14px 24px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
   }
   .mobile-task-card {
     background: var(--card-bg);
-    border-radius: 12px;
+    border-radius: 14px;
     border-left: 4px solid #ccc;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
     overflow: hidden;
   }
   .mobile-task-header {
-    padding: 10px 12px 8px;
+    padding: 12px 14px 10px;
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: 8px;
     cursor: pointer;
   }
-  .mobile-task-name { font-size: 14px; font-weight: 600; color: var(--text-primary); line-height: 1.3; }
-  .mobile-task-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
-  .mobile-plan-area { padding: 0 12px 10px; border-top: 1px solid var(--border-light); }
+  .mobile-task-name { font-size: 15px; font-weight: 600; color: var(--text-primary); line-height: 1.3; }
+  .mobile-task-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 5px; }
+  .mobile-plan-area { padding: 0 14px 12px; }
+  .mobile-plan-divider { height: 1px; background: var(--border-light); margin-bottom: 8px; }
   .mobile-plan-item {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 0;
-    border-bottom: 1px solid var(--border-light);
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 0;
   }
-  .mobile-plan-item:last-child { border-bottom: none; }
   .mobile-plan-add {
-    padding: 8px 0 2px;
+    padding: 8px 0 0;
     color: var(--accent);
     font-size: 13px;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 4px;
+    font-weight: 500;
   }
   .mobile-empty-day {
     text-align: center;
-    color: #bbb;
+    color: #ccc;
     font-size: 14px;
-    padding: 40px 20px;
+    padding: 60px 20px;
   }
 </style>
 </head>
@@ -924,20 +928,18 @@ function App() {
             </div>
             {/* 日期横条 */}
             <div className="mobile-day-strip">
-              <button onClick={()=>{const prev=new Date(mMonday);prev.setDate(prev.getDate()-7);setMobileDay(dateKey(prev));}} style={{background:'rgba(0,0,0,0.05)',border:'none',borderRadius:8,padding:'4px 8px',cursor:'pointer',fontSize:14,flexShrink:0}}>‹</button>
+              <button onClick={()=>{const prev=new Date(mMonday);prev.setDate(prev.getDate()-7);setMobileDay(dateKey(prev));}} style={{background:'none',border:'none',color:'#bbb',cursor:'pointer',fontSize:20,padding:'0 4px',flexShrink:0}}>‹</button>
               {mDays.map(d => {
                 const dk = dateKey(d);
-                const todayChip = isToday(d);
-                const active = dk === mdKey;
                 return (
                   <div key={dk} onClick={()=>setMobileDay(dk)}
-                    className={`mobile-day-chip ${active?'active':''} ${todayChip?'today-chip':''}`}>
+                    className={`mobile-day-chip ${dk===mdKey?'active':''} ${isToday(d)?'today-chip':''}`}>
                     <span className="mobile-day-chip-label">{dayLabel(d)}</span>
                     <span className="mobile-day-chip-num">{d.getDate()}</span>
                   </div>
                 );
               })}
-              <button onClick={()=>{const next=new Date(mMonday);next.setDate(next.getDate()+7);setMobileDay(dateKey(next));}} style={{background:'rgba(0,0,0,0.05)',border:'none',borderRadius:8,padding:'4px 8px',cursor:'pointer',fontSize:14,flexShrink:0}}>›</button>
+              <button onClick={()=>{const next=new Date(mMonday);next.setDate(next.getDate()+7);setMobileDay(dateKey(next));}} style={{background:'none',border:'none',color:'#bbb',cursor:'pointer',fontSize:20,padding:'0 4px',flexShrink:0}}>›</button>
             </div>
             {/* 任务卡片列表 */}
             <div className="mobile-task-list">
@@ -958,15 +960,16 @@ function App() {
                       <span style={{color:'#ccc',fontSize:16}}>›</span>
                     </div>
                     <div className="mobile-plan-area">
+                      {items && <div className="mobile-plan-divider"/>}
                       {items ? items.map((it,i) => (
                         <div key={i} className="mobile-plan-item">
                           <span onClick={()=>toggleItemDone(task.id,mdKey,i)}
-                            style={{flexShrink:0,width:18,height:18,borderRadius:4,border:`2px solid ${it.done?'#22c55e':'#ddd'}`,background:it.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
-                            {it.done && <span style={{color:'#fff',fontSize:12}}>✓</span>}
+                            style={{flexShrink:0,marginTop:2,width:20,height:20,borderRadius:5,border:`2px solid ${it.done?'#22c55e':'#ddd'}`,background:it.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+                            {it.done && <span style={{color:'#fff',fontSize:13,lineHeight:1}}>✓</span>}
                           </span>
                           <div style={{flex:1,opacity:it.done?0.5:1}}>
-                            <div style={{fontSize:13,fontWeight:it.title?600:400,color:'#333',textDecoration:it.done?'line-through':'none'}}>{it.title||it.content.split('\n')[0]}</div>
-                            {it.title && it.content && <div style={{fontSize:11,color:'#999',marginTop:2,lineHeight:1.4}}>{it.content}</div>}
+                            <div style={{fontSize:14,fontWeight:600,color:'#222',textDecoration:it.done?'line-through':'none',lineHeight:1.4}}>{it.title||it.content.split('\n')[0]}</div>
+                            {it.title && it.content && <div style={{fontSize:12,color:'#999',marginTop:3,lineHeight:1.5}}>{it.content}</div>}
                           </div>
                         </div>
                       )) : null}
