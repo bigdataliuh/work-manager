@@ -845,8 +845,20 @@ function App() {
     }
   };
 
+  const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
+
   return (
     <>
+      {/* 微信内置浏览器提示 */}
+      {isWeChat && (
+        <div style={{background:'#07c160',color:'#fff',padding:'10px 16px',fontSize:13,lineHeight:1.5,display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+          <span style={{fontSize:20}}>💬</span>
+          <div>
+            <div style={{fontWeight:600}}>请在外部浏览器中打开</div>
+            <div style={{opacity:0.9,fontSize:12}}>点右上角 ··· → 选择「在浏览器打开」，数据才能正常同步</div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="header">
         <div className="header-top">
