@@ -1,0 +1,28 @@
+{
+  "name": "work_manager",
+  "version": "1.0.0",
+  "description": "Lightweight work manager with local-first storage and optional GitHub Gist sync.",
+  "main": "app.js",
+  "scripts": {
+    "build": "esbuild src/app.jsx --bundle --format=iife --platform=browser --outfile=app.js",
+    "check": "npm run build",
+    "start": "python3 -m http.server 4173"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bigdataliuh/work-manager.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/bigdataliuh/work-manager/issues"
+  },
+  "homepage": "https://github.com/bigdataliuh/work-manager#readme",
+  "devDependencies": {
+    "esbuild": "^0.28.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  }
+}
