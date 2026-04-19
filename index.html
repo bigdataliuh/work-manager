@@ -403,8 +403,91 @@
   /* Responsive */
   @media (max-width: 768px) {
     .header { padding: 12px 14px 10px; }
-    .header h1 { font-size: 16px; }
+    .header h1 { font-size: 15px; }
     .btn { font-size: 12px; padding: 5px 10px; }
+  }
+
+  /* Mobile view */
+  .mobile-day-strip {
+    display: flex;
+    gap: 8px;
+    padding: 10px 14px;
+    overflow-x: auto;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+  .mobile-day-strip::-webkit-scrollbar { display: none; }
+  .mobile-day-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+    min-width: 44px;
+    border: 1.5px solid transparent;
+    transition: all 0.15s;
+  }
+  .mobile-day-chip.active { background: var(--accent); border-color: var(--accent); }
+  .mobile-day-chip.today-chip:not(.active) { border-color: var(--accent); }
+  .mobile-day-chip-label { font-size: 10px; font-weight: 500; color: var(--text-muted); }
+  .mobile-day-chip.active .mobile-day-chip-label { color: rgba(255,255,255,0.8); }
+  .mobile-day-chip-num { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+  .mobile-day-chip.active .mobile-day-chip-num { color: #fff; }
+  .mobile-day-chip.today-chip:not(.active) .mobile-day-chip-num { color: var(--accent); }
+
+  .mobile-task-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .mobile-task-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    border-left: 4px solid #ccc;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    overflow: hidden;
+  }
+  .mobile-task-header {
+    padding: 10px 12px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .mobile-task-name { font-size: 14px; font-weight: 600; color: var(--text-primary); line-height: 1.3; }
+  .mobile-task-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+  .mobile-plan-area { padding: 0 12px 10px; border-top: 1px solid var(--border-light); }
+  .mobile-plan-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border-light);
+  }
+  .mobile-plan-item:last-child { border-bottom: none; }
+  .mobile-plan-add {
+    padding: 8px 0 2px;
+    color: var(--accent);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .mobile-empty-day {
+    text-align: center;
+    color: #bbb;
+    font-size: 14px;
+    padding: 40px 20px;
   }
 </style>
 </head>
@@ -547,12 +630,20 @@ function App() {
   const [gistId, setGistId] = useState(() => localStorage.getItem(GIST_ID_KEY) || "");
   const [syncStatus, setSyncStatus] = useState("idle"); // idle | syncing | ok | error
   const [tokenInput, setTokenInput] = useState("");
-  const [remoteUpdate, setRemoteUpdate] = useState(null); // 检测到其他设备更新时存放远端数据
+  const [remoteUpdate, setRemoteUpdate] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  const [mobileDay, setMobileDay] = useState(() => dateKey(new Date()));
   const syncTimer = useRef(null);
   const fileRef = useRef(null);
   const mainAreaRef = useRef(null);
   const todayColRef = useRef(null);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
 
   // 启动时从 Gist 加载：比较时间戳，取更新的版本
   useEffect(() => {
@@ -759,45 +850,127 @@ function App() {
       {/* Header */}
       <div className="header">
         <div className="header-top">
-          <h1>📋 刘昊的工作管理系统</h1>
+          <h1>📋 {isMobile ? "工作管理" : "刘昊的工作管理系统"}</h1>
           <div className="header-actions">
             {gistToken && (
               <span style={{fontSize:11,padding:'4px 8px',borderRadius:6,background:'rgba(255,255,255,0.1)',color:syncStatus==='ok'?'#6ee7b7':syncStatus==='error'?'#fca5a5':'#cbd5e1'}}>
-                {syncStatus==='ok'?'☁ 已同步':syncStatus==='syncing'?'☁ 同步中…':'☁ 同步失败'}
+                {syncStatus==='ok'?'☁ 已同步':syncStatus==='syncing'?'☁ …':'☁ 失败'}
               </span>
             )}
             <button className="btn btn-ghost" onClick={()=>setShowSettings(true)}>⚙</button>
-            <button className="btn btn-ghost" onClick={()=>setShowArchive(true)}>已完结</button>
+            {!isMobile && <button className="btn btn-ghost" onClick={()=>setShowArchive(true)}>已完结</button>}
             <button className="btn btn-primary" onClick={()=>setShowAdd(true)}>+ 新任务</button>
           </div>
         </div>
-        <div className="week-nav">
-          <button onClick={()=>setWeekOffset(w=>w-1)}>‹</button>
-          <div className="week-info">
-            {fmtDate(days[0])} — {fmtDate(days[6])}
-            {isCurrentWeek && <span className="badge-week">本周</span>}
+        {!isMobile && (
+          <div className="week-nav">
+            <button onClick={()=>setWeekOffset(w=>w-1)}>‹</button>
+            <div className="week-info">
+              {fmtDate(days[0])} — {fmtDate(days[6])}
+              {isCurrentWeek && <span className="badge-week">本周</span>}
+            </div>
+            <div style={{display:'flex',gap:6}}>
+              <button className="btn-today" onClick={scrollToToday}>今日</button>
+              <button onClick={()=>setWeekOffset(w=>w+1)}>›</button>
+            </div>
           </div>
-          <div style={{display:'flex',gap:6}}>
-            <button className="btn-today" onClick={scrollToToday}>今日</button>
-            <button onClick={()=>setWeekOffset(w=>w+1)}>›</button>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* 冲突提示横幅 */}
       {remoteUpdate && (
-        <div style={{background:'#fff3cd',borderBottom:'1px solid #ffc107',padding:'8px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',fontSize:13}}>
-          <span>☁️ 检测到其他设备有新数据（{new Date(remoteUpdate._lastModified).toLocaleTimeString()}）</span>
+        <div style={{background:'#fff3cd',borderBottom:'1px solid #ffc107',padding:'8px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',fontSize:13,flexWrap:'wrap',gap:8}}>
+          <span style={{fontSize:12}}>☁️ 其他设备有新数据（{new Date(remoteUpdate._lastModified).toLocaleTimeString()}）</span>
           <div style={{display:'flex',gap:8}}>
             <button onClick={()=>{setData(remoteUpdate);saveData(remoteUpdate);setRemoteUpdate(null);setSyncStatus("ok");}}
-              style={{background:'#1a1a2e',color:'#fff',border:'none',borderRadius:6,padding:'4px 12px',fontSize:12,cursor:'pointer'}}>同步最新数据</button>
+              style={{background:'#1a1a2e',color:'#fff',border:'none',borderRadius:6,padding:'4px 12px',fontSize:12,cursor:'pointer'}}>同步</button>
             <button onClick={()=>setRemoteUpdate(null)}
               style={{background:'none',border:'none',color:'#999',fontSize:12,cursor:'pointer'}}>忽略</button>
           </div>
         </div>
       )}
 
-      {/* Filter + Search */}
+      {/* ===== 移动端视图 ===== */}
+      {isMobile ? (() => {
+        const mobileDayObj = new Date(mobileDay + 'T00:00:00');
+        // 构建当前周 7 天（以 mobileDay 所在周为准）
+        const mMonday = getMonday(mobileDayObj);
+        const mDays = Array.from({length:7}, (_,i) => { const d=new Date(mMonday); d.setDate(d.getDate()+i); return d; });
+        const mdKey = mobileDay;
+        const mobileTasks = data.tasks.filter(t => {
+          if (!searchQuery.trim()) return true;
+          const q = searchQuery.toLowerCase();
+          return t.name.toLowerCase().includes(q) || t.responsible?.toLowerCase().includes(q);
+        });
+        return (
+          <>
+            {/* 搜索框 */}
+            <div style={{padding:'8px 14px',background:'#fff',borderBottom:'1px solid #eee'}}>
+              <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+                placeholder="🔍 搜索任务…"
+                style={{width:'100%',padding:'7px 12px',border:'1.5px solid #eee',borderRadius:20,fontSize:13,fontFamily:'inherit',outline:'none',background:'#fafafa',boxSizing:'border-box'}}/>
+            </div>
+            {/* 日期横条 */}
+            <div className="mobile-day-strip">
+              <button onClick={()=>{const prev=new Date(mMonday);prev.setDate(prev.getDate()-7);setMobileDay(dateKey(prev));}} style={{background:'rgba(0,0,0,0.05)',border:'none',borderRadius:8,padding:'4px 8px',cursor:'pointer',fontSize:14,flexShrink:0}}>‹</button>
+              {mDays.map(d => {
+                const dk = dateKey(d);
+                const todayChip = isToday(d);
+                const active = dk === mdKey;
+                return (
+                  <div key={dk} onClick={()=>setMobileDay(dk)}
+                    className={`mobile-day-chip ${active?'active':''} ${todayChip?'today-chip':''}`}>
+                    <span className="mobile-day-chip-label">{dayLabel(d)}</span>
+                    <span className="mobile-day-chip-num">{d.getDate()}</span>
+                  </div>
+                );
+              })}
+              <button onClick={()=>{const next=new Date(mMonday);next.setDate(next.getDate()+7);setMobileDay(dateKey(next));}} style={{background:'rgba(0,0,0,0.05)',border:'none',borderRadius:8,padding:'4px 8px',cursor:'pointer',fontSize:14,flexShrink:0}}>›</button>
+            </div>
+            {/* 任务卡片列表 */}
+            <div className="mobile-task-list">
+              {mobileTasks.length === 0 && <div className="mobile-empty-day">暂无任务</div>}
+              {mobileTasks.map(task => {
+                const items = getCellItems(task, mdKey);
+                return (
+                  <div key={task.id} className="mobile-task-card" style={{borderLeftColor:catColor(task.category)}}>
+                    <div className="mobile-task-header" onClick={()=>setEditTask({...task})}>
+                      <div style={{flex:1}}>
+                        <div className="mobile-task-name">{task.name}</div>
+                        <div className="mobile-task-badges">
+                          <PBadge p={task.priority} small/>
+                          <SBadge s={task.status} small/>
+                          {task.deadline && <span className="badge-deadline">截止:{task.deadline}</span>}
+                        </div>
+                      </div>
+                      <span style={{color:'#ccc',fontSize:16}}>›</span>
+                    </div>
+                    <div className="mobile-plan-area">
+                      {items ? items.map((it,i) => (
+                        <div key={i} className="mobile-plan-item">
+                          <span onClick={()=>toggleItemDone(task.id,mdKey,i)}
+                            style={{flexShrink:0,width:18,height:18,borderRadius:4,border:`2px solid ${it.done?'#22c55e':'#ddd'}`,background:it.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+                            {it.done && <span style={{color:'#fff',fontSize:12}}>✓</span>}
+                          </span>
+                          <div style={{flex:1,opacity:it.done?0.5:1}}>
+                            <div style={{fontSize:13,fontWeight:it.title?600:400,color:'#333',textDecoration:it.done?'line-through':'none'}}>{it.title||it.content.split('\n')[0]}</div>
+                            {it.title && it.content && <div style={{fontSize:11,color:'#999',marginTop:2,lineHeight:1.4}}>{it.content}</div>}
+                          </div>
+                        </div>
+                      )) : null}
+                      <div className="mobile-plan-add" onClick={()=>{setEditCell({taskId:task.id,dk:mdKey});setCellItems(items?items.map(it=>({...it})):[{title:"",content:""}]);}}>
+                        + {items ? '添加计划' : '记录今日计划'}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        );
+      })() : (
+      <>
+      {/* Filter + Search（桌面） */}
       <div className="filter-bar">
         {["全部",...CATEGORIES].map(c => (
           <button key={c} className={`filter-btn ${filterCat===c?'active':''}`}
@@ -805,8 +978,7 @@ function App() {
             onClick={()=>setFilterCat(c)}>{c}</button>
         ))}
         <div style={{marginLeft:'auto',flexShrink:0}}>
-          <input
-            value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+          <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
             placeholder="🔍 搜索任务…"
             style={{padding:'3px 10px',border:'1px solid #ddd',borderRadius:20,fontSize:12,fontFamily:'inherit',outline:'none',width:140,background:'#fafafa'}}/>
         </div>
@@ -907,6 +1079,8 @@ function App() {
         ))}
         {filtered.length===0 && <div style={{padding:40,textAlign:'center',color:'#bbb',fontSize:14,minWidth:900}}>暂无任务，点击右上角"+ 新任务"添加</div>}
       </div>
+      </>
+      )}
 
       {/* Add modal */}
       <Modal open={showAdd} onClose={()=>setShowAdd(false)} title="添加新任务">
