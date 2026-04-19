@@ -577,6 +577,91 @@ function saveData(d) {
   } catch(e) { console.error(e); }
 }
 
+function MobileTaskCard({ task, dk, getCellItems, toggleItemDone, onEditTask, onEditCell, setCellItems }) {
+  const items = getCellItems(task, dk);
+  return (
+    <div className="mobile-task-card" style={{borderLeftColor:catColor(task.category)}}>
+      <div className="mobile-task-header" onClick={() => onEditTask({...task})}>
+        <div style={{flex:1}}>
+          <div className="mobile-task-name">{task.name}</div>
+          <div className="mobile-task-badges">
+            <PBadge p={task.priority} small/>
+            <SBadge s={task.status} small/>
+            {task.deadline && <span className="badge-deadline">截止:{task.deadline}</span>}
+          </div>
+        </div>
+        <span style={{color:'#ccc',fontSize:18,marginLeft:8}}>›</span>
+      </div>
+      <div style={{borderTop:'1px solid #f0f0f0',margin:'0 14px'}}/>
+      <div style={{padding:'8px 14px 12px'}}>
+        {items && items.map((it, i) => (
+          <div key={i} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'6px 0',borderBottom:i<items.length-1?'1px solid #f5f5f5':'none'}}>
+            <span onClick={() => toggleItemDone(task.id, dk, i)}
+              style={{flexShrink:0,marginTop:2,width:20,height:20,borderRadius:5,border:`2px solid ${it.done?'#22c55e':'#ddd'}`,background:it.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+              {it.done && <span style={{color:'#fff',fontSize:13,lineHeight:1}}>✓</span>}
+            </span>
+            <div style={{flex:1,opacity:it.done?0.5:1}}>
+              <div style={{fontSize:14,fontWeight:600,color:'#222',textDecoration:it.done?'line-through':'none',lineHeight:1.4}}>
+                {it.title || it.content.split('\n')[0]}
+              </div>
+              {it.title && it.content && (
+                <div style={{fontSize:12,color:'#999',marginTop:3,lineHeight:1.5}}>{it.content}</div>
+              )}
+            </div>
+          </div>
+        ))}
+        <div onClick={() => { onEditCell({taskId:task.id, dk}); setCellItems(items ? items.map(it=>({...it})) : [{title:'',content:''}]); }}
+          style={{paddingTop:items?8:0,color:'#4a90d9',fontSize:13,fontWeight:500,cursor:'pointer'}}>
+          + {items && items.length > 0 ? '添加计划' : '记录今日计划'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileView({ data, mobileDay, setMobileDay, searchQuery, setSearchQuery,
+  getCellItems, toggleItemDone, onEditTask, onEditCell, setCellItems }) {
+  const mobileDayObj = new Date(mobileDay + 'T00:00:00');
+  const mMonday = getMonday(mobileDayObj);
+  const mDays = Array.from({length:7}, (_,i) => { const d=new Date(mMonday); d.setDate(d.getDate()+i); return d; });
+  const q = searchQuery.trim().toLowerCase();
+  const tasks = data.tasks.filter(t => !q || t.name.toLowerCase().includes(q) || t.responsible?.toLowerCase().includes(q));
+
+  return (
+    <>
+      <div style={{padding:'8px 14px',background:'#fff',borderBottom:'1px solid #eee',flexShrink:0}}>
+        <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+          placeholder="🔍 搜索任务…"
+          style={{width:'100%',padding:'8px 14px',border:'1.5px solid #eee',borderRadius:20,fontSize:14,fontFamily:'inherit',outline:'none',background:'#fafafa',boxSizing:'border-box'}}/>
+      </div>
+      <div className="mobile-day-strip">
+        <button onClick={()=>{const p=new Date(mMonday);p.setDate(p.getDate()-7);setMobileDay(dateKey(p));}}
+          style={{background:'none',border:'none',color:'#bbb',cursor:'pointer',fontSize:20,padding:'0 4px',flexShrink:0}}>‹</button>
+        {mDays.map(d => {
+          const dk = dateKey(d);
+          return (
+            <div key={dk} onClick={()=>setMobileDay(dk)}
+              className={`mobile-day-chip ${dk===mobileDay?'active':''} ${isToday(d)?'today-chip':''}`}>
+              <span className="mobile-day-chip-label">{dayLabel(d)}</span>
+              <span className="mobile-day-chip-num">{d.getDate()}</span>
+            </div>
+          );
+        })}
+        <button onClick={()=>{const n=new Date(mMonday);n.setDate(n.getDate()+7);setMobileDay(dateKey(n));}}
+          style={{background:'none',border:'none',color:'#bbb',cursor:'pointer',fontSize:20,padding:'0 4px',flexShrink:0}}>›</button>
+      </div>
+      <div className="mobile-task-list">
+        {tasks.length === 0 && <div className="mobile-empty-day">暂无任务</div>}
+        {tasks.map(task => (
+          <MobileTaskCard key={task.id} task={task} dk={mobileDay}
+            getCellItems={getCellItems} toggleItemDone={toggleItemDone}
+            onEditTask={onEditTask} onEditCell={onEditCell} setCellItems={setCellItems}/>
+        ))}
+      </div>
+    </>
+  );
+}
+
 function PBadge({p, small}) {
   const cls = p==="高"?"badge-priority-high":p==="中"?"badge-priority-mid":"badge-priority-low";
   return <span className={`badge ${small?'badge-sm':''} ${cls}`}>{p}</span>;
@@ -875,6 +960,7 @@ function App() {
             )}
             <button className="btn btn-ghost" onClick={()=>setShowSettings(true)}>⚙</button>
             {!isMobile && <button className="btn btn-ghost" onClick={()=>setShowArchive(true)}>已完结</button>}
+            {isMobile && <button className="btn btn-ghost" onClick={()=>setMobileDay(dateKey(new Date()))}>今日</button>}
             <button className="btn btn-primary" onClick={()=>setShowAdd(true)}>+ 新任务</button>
           </div>
         </div>
@@ -907,83 +993,13 @@ function App() {
       )}
 
       {/* ===== 移动端视图 ===== */}
-      {isMobile ? (() => {
-        const mobileDayObj = new Date(mobileDay + 'T00:00:00');
-        // 构建当前周 7 天（以 mobileDay 所在周为准）
-        const mMonday = getMonday(mobileDayObj);
-        const mDays = Array.from({length:7}, (_,i) => { const d=new Date(mMonday); d.setDate(d.getDate()+i); return d; });
-        const mdKey = mobileDay;
-        const mobileTasks = data.tasks.filter(t => {
-          if (!searchQuery.trim()) return true;
-          const q = searchQuery.toLowerCase();
-          return t.name.toLowerCase().includes(q) || t.responsible?.toLowerCase().includes(q);
-        });
-        return (
-          <>
-            {/* 搜索框 */}
-            <div style={{padding:'8px 14px',background:'#fff',borderBottom:'1px solid #eee'}}>
-              <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
-                placeholder="🔍 搜索任务…"
-                style={{width:'100%',padding:'7px 12px',border:'1.5px solid #eee',borderRadius:20,fontSize:13,fontFamily:'inherit',outline:'none',background:'#fafafa',boxSizing:'border-box'}}/>
-            </div>
-            {/* 日期横条 */}
-            <div className="mobile-day-strip">
-              <button onClick={()=>{const prev=new Date(mMonday);prev.setDate(prev.getDate()-7);setMobileDay(dateKey(prev));}} style={{background:'none',border:'none',color:'#bbb',cursor:'pointer',fontSize:20,padding:'0 4px',flexShrink:0}}>‹</button>
-              {mDays.map(d => {
-                const dk = dateKey(d);
-                return (
-                  <div key={dk} onClick={()=>setMobileDay(dk)}
-                    className={`mobile-day-chip ${dk===mdKey?'active':''} ${isToday(d)?'today-chip':''}`}>
-                    <span className="mobile-day-chip-label">{dayLabel(d)}</span>
-                    <span className="mobile-day-chip-num">{d.getDate()}</span>
-                  </div>
-                );
-              })}
-              <button onClick={()=>{const next=new Date(mMonday);next.setDate(next.getDate()+7);setMobileDay(dateKey(next));}} style={{background:'none',border:'none',color:'#bbb',cursor:'pointer',fontSize:20,padding:'0 4px',flexShrink:0}}>›</button>
-            </div>
-            {/* 任务卡片列表 */}
-            <div className="mobile-task-list">
-              {mobileTasks.length === 0 && <div className="mobile-empty-day">暂无任务</div>}
-              {mobileTasks.map(task => {
-                const items = getCellItems(task, mdKey);
-                return (
-                  <div key={task.id} className="mobile-task-card" style={{borderLeftColor:catColor(task.category)}}>
-                    <div className="mobile-task-header" onClick={()=>setEditTask({...task})}>
-                      <div style={{flex:1}}>
-                        <div className="mobile-task-name">{task.name}</div>
-                        <div className="mobile-task-badges">
-                          <PBadge p={task.priority} small/>
-                          <SBadge s={task.status} small/>
-                          {task.deadline && <span className="badge-deadline">截止:{task.deadline}</span>}
-                        </div>
-                      </div>
-                      <span style={{color:'#ccc',fontSize:16}}>›</span>
-                    </div>
-                    <div className="mobile-plan-area">
-                      {items && <div className="mobile-plan-divider"/>}
-                      {items ? items.map((it,i) => (
-                        <div key={i} className="mobile-plan-item">
-                          <span onClick={()=>toggleItemDone(task.id,mdKey,i)}
-                            style={{flexShrink:0,marginTop:2,width:20,height:20,borderRadius:5,border:`2px solid ${it.done?'#22c55e':'#ddd'}`,background:it.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
-                            {it.done && <span style={{color:'#fff',fontSize:13,lineHeight:1}}>✓</span>}
-                          </span>
-                          <div style={{flex:1,opacity:it.done?0.5:1}}>
-                            <div style={{fontSize:14,fontWeight:600,color:'#222',textDecoration:it.done?'line-through':'none',lineHeight:1.4}}>{it.title||it.content.split('\n')[0]}</div>
-                            {it.title && it.content && <div style={{fontSize:12,color:'#999',marginTop:3,lineHeight:1.5}}>{it.content}</div>}
-                          </div>
-                        </div>
-                      )) : null}
-                      <div className="mobile-plan-add" onClick={()=>{setEditCell({taskId:task.id,dk:mdKey});setCellItems(items?items.map(it=>({...it})):[{title:"",content:""}]);}}>
-                        + {items ? '添加计划' : '记录今日计划'}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        );
-      })() : (
+      {isMobile ? (
+        <MobileView
+          data={data} mobileDay={mobileDay} setMobileDay={setMobileDay}
+          searchQuery={searchQuery} setSearchQuery={setSearchQuery}
+          getCellItems={getCellItems} toggleItemDone={toggleItemDone}
+          onEditTask={setEditTask} onEditCell={setEditCell} setCellItems={setCellItems}/>
+      ) : (
       <>
       {/* Filter + Search（桌面） */}
       <div className="filter-bar">
