@@ -1,71 +1,102 @@
-export const GIST_ID_KEY = "work-mgr-gist-id";
-export const SESSION_TOKEN_KEY = "work-mgr-gist-token-session";
+export const GIST_ID_KEY = "work-mgr-server-workspace";
+export const SESSION_TOKEN_KEY = "work-mgr-server-sync-session";
 
-async function request(url, options = {}) {
-  const response = await fetch(url, options);
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(text || `Request failed: ${response.status}`);
-  }
-  return response.json();
+const REVISION_KEY = "work-mgr-server-revision";
+const DEFAULT_WORKSPACE_ID = "primary";
+const CONNECTED_SESSION = "server-sync";
+
+function normalizeApiBase(base) {
+  if (!base) return "/api";
+  return base.endsWith("/") ? base.slice(0, -1) : base;
 }
 
-export async function gistCreate(token, data) {
-  const json = await request("https://api.github.com/gists", {
-    method: "POST",
-    headers: {
-      Authorization: `token ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      description: "工作管理系统数据备份",
-      public: false,
-      files: {
-        "work-manager-data.json": {
-          content: JSON.stringify(data)
-        }
-      }
-    })
-  });
-  return json.id;
+function getApiBase() {
+  return normalizeApiBase(globalThis.window?.WORK_MANAGER_API_BASE || "/api");
 }
 
-export async function gistUpdate(token, gistId, data) {
-  await request(`https://api.github.com/gists/${gistId}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `token ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      files: {
-        "work-manager-data.json": {
-          content: JSON.stringify(data)
-        }
-      }
-    })
-  });
-  return true;
+function readStoredRevision() {
+  const raw = localStorage.getItem(REVISION_KEY);
+  return raw ? Number(raw) || 0 : 0;
 }
 
-export async function gistLoad(token, gistId) {
-  const json = await request(`https://api.github.com/gists/${gistId}`, {
+function writeStoredRevision(revision) {
+  if (typeof revision !== "number" || Number.isNaN(revision)) return;
+  localStorage.setItem(REVISION_KEY, String(revision));
+}
+
+async function request(path, options = {}) {
+  const response = await fetch(`${getApiBase()}${path}`, {
+    ...options,
     headers: {
-      Authorization: `token ${token}`
+      "Content-Type": "application/json",
+      ...(options.headers || {})
     }
   });
 
-  const raw = json.files?.["work-manager-data.json"]?.content;
-  return raw ? JSON.parse(raw) : null;
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const error = new Error(payload?.message || `Request failed: ${response.status}`);
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  return payload;
+}
+
+function createEmptyRemoteState() {
+  return {
+    schemaVersion: 3,
+    _lastModified: 0,
+    tasks: [],
+    archivedTasks: []
+  };
+}
+
+export async function gistCreate(_token, data) {
+  const json = await request("/state", {
+    method: "PUT",
+    body: JSON.stringify({
+      state: data,
+      baseRevision: readStoredRevision()
+    })
+  });
+
+  writeStoredRevision(json.revision || 0);
+  return DEFAULT_WORKSPACE_ID;
+}
+
+export async function gistUpdate(_token, _gistId, data) {
+  const json = await request("/state", {
+    method: "PUT",
+    body: JSON.stringify({
+      state: data,
+      baseRevision: readStoredRevision()
+    })
+  });
+
+  writeStoredRevision(json.revision || 0);
+  return true;
+}
+
+export async function gistLoad(_token, _gistId) {
+  const json = await request("/state");
+  writeStoredRevision(json?.revision || 0);
+  return json?.state || createEmptyRemoteState();
 }
 
 export function getSessionToken() {
-  return sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
+  return sessionStorage.getItem(SESSION_TOKEN_KEY) || CONNECTED_SESSION;
 }
 
-export function setSessionToken(token) {
-  if (!token) return;
-  sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+export function setSessionToken(_token) {
+  sessionStorage.setItem(SESSION_TOKEN_KEY, CONNECTED_SESSION);
 }
 
 export function clearSessionToken() {
@@ -73,12 +104,11 @@ export function clearSessionToken() {
 }
 
 export function getSavedGistId() {
-  return localStorage.getItem(GIST_ID_KEY) || "";
+  return localStorage.getItem(GIST_ID_KEY) || DEFAULT_WORKSPACE_ID;
 }
 
 export function setSavedGistId(gistId) {
-  if (!gistId) return;
-  localStorage.setItem(GIST_ID_KEY, gistId);
+  localStorage.setItem(GIST_ID_KEY, gistId || DEFAULT_WORKSPACE_ID);
 }
 
 export function clearSavedGistId() {

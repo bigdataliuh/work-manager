@@ -21684,77 +21684,97 @@
   }
 
   // src/sync.js
-  var GIST_ID_KEY = "work-mgr-gist-id";
-  var SESSION_TOKEN_KEY = "work-mgr-gist-token-session";
-  async function request(url, options = {}) {
-    const response = await fetch(url, options);
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(text || `Request failed: ${response.status}`);
-    }
-    return response.json();
+  var GIST_ID_KEY = "work-mgr-server-workspace";
+  var SESSION_TOKEN_KEY = "work-mgr-server-sync-session";
+  var REVISION_KEY = "work-mgr-server-revision";
+  var DEFAULT_WORKSPACE_ID = "primary";
+  var CONNECTED_SESSION = "server-sync";
+  function normalizeApiBase(base) {
+    if (!base) return "/api";
+    return base.endsWith("/") ? base.slice(0, -1) : base;
   }
-  async function gistCreate(token, data) {
-    const json = await request("https://api.github.com/gists", {
-      method: "POST",
-      headers: {
-        Authorization: `token ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        description: "\u5DE5\u4F5C\u7BA1\u7406\u7CFB\u7EDF\u6570\u636E\u5907\u4EFD",
-        public: false,
-        files: {
-          "work-manager-data.json": {
-            content: JSON.stringify(data)
-          }
-        }
-      })
-    });
-    return json.id;
+  function getApiBase() {
+    return normalizeApiBase(globalThis.window?.WORK_MANAGER_API_BASE || "/api");
   }
-  async function gistUpdate(token, gistId, data) {
-    await request(`https://api.github.com/gists/${gistId}`, {
-      method: "PATCH",
-      headers: {
-        Authorization: `token ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        files: {
-          "work-manager-data.json": {
-            content: JSON.stringify(data)
-          }
-        }
-      })
-    });
-    return true;
+  function readStoredRevision() {
+    const raw = localStorage.getItem(REVISION_KEY);
+    return raw ? Number(raw) || 0 : 0;
   }
-  async function gistLoad(token, gistId) {
-    const json = await request(`https://api.github.com/gists/${gistId}`, {
+  function writeStoredRevision(revision) {
+    if (typeof revision !== "number" || Number.isNaN(revision)) return;
+    localStorage.setItem(REVISION_KEY, String(revision));
+  }
+  async function request(path, options = {}) {
+    const response = await fetch(`${getApiBase()}${path}`, {
+      ...options,
       headers: {
-        Authorization: `token ${token}`
+        "Content-Type": "application/json",
+        ...options.headers || {}
       }
     });
-    const raw = json.files?.["work-manager-data.json"]?.content;
-    return raw ? JSON.parse(raw) : null;
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    if (!response.ok) {
+      const error = new Error(payload?.message || `Request failed: ${response.status}`);
+      error.status = response.status;
+      error.payload = payload;
+      throw error;
+    }
+    return payload;
+  }
+  function createEmptyRemoteState() {
+    return {
+      schemaVersion: 3,
+      _lastModified: 0,
+      tasks: [],
+      archivedTasks: []
+    };
+  }
+  async function gistCreate(_token, data) {
+    const json = await request("/state", {
+      method: "PUT",
+      body: JSON.stringify({
+        state: data,
+        baseRevision: readStoredRevision()
+      })
+    });
+    writeStoredRevision(json.revision || 0);
+    return DEFAULT_WORKSPACE_ID;
+  }
+  async function gistUpdate(_token, _gistId, data) {
+    const json = await request("/state", {
+      method: "PUT",
+      body: JSON.stringify({
+        state: data,
+        baseRevision: readStoredRevision()
+      })
+    });
+    writeStoredRevision(json.revision || 0);
+    return true;
+  }
+  async function gistLoad(_token, _gistId) {
+    const json = await request("/state");
+    writeStoredRevision(json?.revision || 0);
+    return json?.state || createEmptyRemoteState();
   }
   function getSessionToken() {
-    return sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
+    return sessionStorage.getItem(SESSION_TOKEN_KEY) || CONNECTED_SESSION;
   }
-  function setSessionToken(token) {
-    if (!token) return;
-    sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+  function setSessionToken(_token) {
+    sessionStorage.setItem(SESSION_TOKEN_KEY, CONNECTED_SESSION);
   }
   function clearSessionToken() {
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
   }
   function getSavedGistId() {
-    return localStorage.getItem(GIST_ID_KEY) || "";
+    return localStorage.getItem(GIST_ID_KEY) || DEFAULT_WORKSPACE_ID;
   }
   function setSavedGistId(gistId) {
-    if (!gistId) return;
-    localStorage.setItem(GIST_ID_KEY, gistId);
+    localStorage.setItem(GIST_ID_KEY, gistId || DEFAULT_WORKSPACE_ID);
   }
   function clearSavedGistId() {
     localStorage.removeItem(GIST_ID_KEY);
@@ -22564,17 +22584,7 @@
         })
       },
       "\u5220\u9664"
-    )))))), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showSettings, onClose: () => setShowSettings(false), title: "\u8BBE\u7F6E", width: 420 }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section", style: { marginTop: 0, paddingTop: 0, borderTop: "none" } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u2601\uFE0F \u4E91\u7AEF\u540C\u6B65"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u65B9\u5F0F\uFF1A"), "GitHub Gist"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "Token \u4FDD\u5B58\uFF1A"), "\u4EC5\u5F53\u524D\u6D4F\u89C8\u5668\u4F1A\u8BDD\uFF0C\u5173\u95ED\u6807\u7B7E\u9875\u540E\u5931\u6548"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F53\u524D Gist\uFF1A"), gistId ? gistId : "\u672A\u521B\u5EFA")), gistToken ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: pullFromCloud }, "\u2193 \u4ECE\u4E91\u7AEF\u6062\u590D"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: disconnectCloud }, "\u65AD\u5F00\u672C\u6B21\u4F1A\u8BDD"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: forgetCloud }, "\u79FB\u9664 Gist \u914D\u7F6E")) : /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("p", { className: "settings-note", style: { marginTop: 10 } }, "Token \u4E0D\u518D\u5199\u5165 `localStorage`\u3002\u5982\u679C\u4F60\u5DF2\u7ECF\u6709 Gist ID\uFF0C\u53EA\u8981\u91CD\u65B0\u8F93\u5165 Token \u5C31\u80FD\u7EE7\u7EED\u540C\u6B65\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", gap: 8, marginTop: 10 } }, /* @__PURE__ */ import_react2.default.createElement(
-      "input",
-      {
-        className: "field-input",
-        style: { flex: 1 },
-        type: "password",
-        placeholder: "\u7C98\u8D34 GitHub Token\uFF08\u9700\u8981 gist \u6743\u9650\uFF09",
-        value: tokenInput,
-        onChange: (event) => setTokenInput(event.target.value)
-      }
-    ), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-primary", onClick: connectCloud }, "\u8FDE\u63A5")))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u6570\u636E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-primary", onClick: exportData }, "\u{1F4E4} \u5BFC\u51FA"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => fileRef.current?.click() }, "\u{1F4E5} \u5BFC\u5165"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: resetDataWithBackup }, "\u{1F5D1} \u91CD\u7F6E"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u5907\u4EFD"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, backupInfo ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u6700\u8FD1\u5907\u4EFD\uFF1A"), new Date(backupInfo.savedAt).toLocaleString()), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u539F\u56E0\uFF1A"), backupInfo.reason)) : /* @__PURE__ */ import_react2.default.createElement("div", null, "\u5F53\u524D\u6CA1\u6709\u672C\u5730\u5907\u4EFD\u3002")), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: restoreBackup }, "\u6062\u590D\u6700\u8FD1\u5907\u4EFD"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u4F7F\u7528\u8BF4\u660E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "settings-note" }, /* @__PURE__ */ import_react2.default.createElement("p", null, "1. \u622A\u6B62\u65F6\u95F4\u73B0\u5728\u5206\u4E3A\u201C\u65E5\u671F\u201D\u548C\u201C\u8BF4\u660E\u201D\u4E24\u79CD\u6A21\u5F0F\uFF0C\u65E5\u671F\u578B\u53EF\u4EE5\u7A33\u5B9A\u6392\u5E8F\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "2. \u4E91\u7AEF\u51FA\u73B0\u66F4\u65B0\u51B2\u7A81\u65F6\uFF0C\u9876\u90E8\u4F1A\u8981\u6C42\u5148\u51B3\u5B9A\u4FDD\u7559\u672C\u5730\u8FD8\u662F\u4F7F\u7528\u4E91\u7AEF\uFF0C\u907F\u514D\u9759\u9ED8\u8986\u76D6\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "3. \u5BFC\u5165\u3001\u91CD\u7F6E\u3001\u5207\u6362\u5230\u4E91\u7AEF\u7248\u672C\u524D\u90FD\u4F1A\u81EA\u52A8\u7559\u4E00\u4EFD\u672C\u5730\u5907\u4EFD\u3002")))), /* @__PURE__ */ import_react2.default.createElement(
+    )))))), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showSettings, onClose: () => setShowSettings(false), title: "\u8BBE\u7F6E", width: 420 }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section", style: { marginTop: 0, paddingTop: 0, borderTop: "none" } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u2601\uFE0F \u670D\u52A1\u7AEF\u540C\u6B65"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u65B9\u5F0F\uFF1A"), "Alibaba Cloud API + MySQL"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F53\u524D\u5DE5\u4F5C\u7A7A\u95F4\uFF1A"), gistId), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u72B6\u6001\uFF1A"), syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u8FDE\u63A5\u5931\u8D25" : "\u540C\u6B65\u4E2D")), /* @__PURE__ */ import_react2.default.createElement("p", { className: "settings-note", style: { marginTop: 10 } }, "\u5F53\u524D\u7248\u672C\u4EE5\u670D\u52A1\u7AEF\u6570\u636E\u5E93\u4F5C\u4E3A\u552F\u4E00\u771F\u5B9E\u6570\u636E\u6E90\u3002\u672C\u5730 localStorage \u7EE7\u7EED\u4FDD\u7559\u7528\u4E8E\u7F13\u5B58\u548C\u5907\u4EFD\uFF0C\u4E0D\u518D\u4F7F\u7528 GitHub Gist \u4F5C\u4E3A\u4E3B\u540C\u6B65\u65B9\u5F0F\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: pullFromCloud }, "\u2193 \u4ECE\u670D\u52A1\u7AEF\u5237\u65B0"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u6570\u636E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-primary", onClick: exportData }, "\u{1F4E4} \u5BFC\u51FA"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => fileRef.current?.click() }, "\u{1F4E5} \u5BFC\u5165"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: resetDataWithBackup }, "\u{1F5D1} \u91CD\u7F6E"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u5907\u4EFD"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, backupInfo ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u6700\u8FD1\u5907\u4EFD\uFF1A"), new Date(backupInfo.savedAt).toLocaleString()), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u539F\u56E0\uFF1A"), backupInfo.reason)) : /* @__PURE__ */ import_react2.default.createElement("div", null, "\u5F53\u524D\u6CA1\u6709\u672C\u5730\u5907\u4EFD\u3002")), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: restoreBackup }, "\u6062\u590D\u6700\u8FD1\u5907\u4EFD"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u4F7F\u7528\u8BF4\u660E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "settings-note" }, /* @__PURE__ */ import_react2.default.createElement("p", null, "1. \u6570\u636E\u4F1A\u4F18\u5148\u5199\u5165\u670D\u52A1\u7AEF\uFF0C\u518D\u540C\u6B65\u5230\u5176\u4ED6\u8BBE\u5907\uFF0C\u8DE8\u7AEF\u4E00\u81F4\u6027\u4F1A\u6BD4 Gist \u65B9\u6848\u7A33\u5B9A\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "2. \u5982\u679C\u5176\u4ED6\u8BBE\u5907\u5DF2\u7ECF\u5199\u5165\u4E86\u65B0\u7248\u672C\uFF0C\u9876\u90E8\u4ECD\u4F1A\u63D0\u793A\u4F60\u51B3\u5B9A\u4FDD\u7559\u672C\u5730\u8FD8\u662F\u91C7\u7528\u670D\u52A1\u7AEF\u7248\u672C\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "3. \u5BFC\u5165\u3001\u91CD\u7F6E\u3001\u8986\u76D6\u670D\u52A1\u7AEF\u7248\u672C\u4E4B\u524D\uFF0C\u7CFB\u7EDF\u4ECD\u4F1A\u81EA\u52A8\u4FDD\u7559\u4E00\u4EFD\u672C\u5730\u5907\u4EFD\u3002")))), /* @__PURE__ */ import_react2.default.createElement(
       ConfirmDialog,
       {
         open: Boolean(confirmState),

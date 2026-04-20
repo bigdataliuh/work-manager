@@ -1,12 +1,15 @@
 {
   "name": "work_manager",
   "version": "1.0.0",
-  "description": "Lightweight work manager with local-first storage and optional GitHub Gist sync.",
+  "description": "Work manager with local cache, server-backed sync, and Alibaba Cloud deployment support.",
   "main": "app.js",
   "scripts": {
-    "build": "esbuild src/app.jsx --bundle --format=iife --platform=browser --outfile=app.js",
+    "build:web": "esbuild src/app.jsx --bundle --format=iife --platform=browser --outfile=app.js",
+    "build": "npm run build:web",
     "check": "npm run build",
-    "start": "python3 -m http.server 4173"
+    "start": "node server/index.js",
+    "start:web": "py -m http.server 4173",
+    "dev:server": "node --watch server/index.js"
   },
   "repository": {
     "type": "git",
@@ -20,6 +23,12 @@
     "url": "https://github.com/bigdataliuh/work-manager/issues"
   },
   "homepage": "https://github.com/bigdataliuh/work-manager#readme",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "mysql2": "^3.15.2"
+  },
   "devDependencies": {
     "esbuild": "^0.28.0",
     "react": "^19.2.5",

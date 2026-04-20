@@ -874,36 +874,18 @@ function App() {
 
       <Modal open={showSettings} onClose={() => setShowSettings(false)} title="设置" width={420}>
         <div className="data-section" style={{ marginTop: 0, paddingTop: 0, borderTop: "none" }}>
-          <div className="data-section-title">☁️ 云端同步</div>
+          <div className="data-section-title">☁️ 服务端同步</div>
           <div className="status-box">
-            <div><strong>同步方式：</strong>GitHub Gist</div>
-            <div><strong>Token 保存：</strong>仅当前浏览器会话，关闭标签页后失效</div>
-            <div><strong>当前 Gist：</strong>{gistId ? gistId : "未创建"}</div>
+            <div><strong>同步方式：</strong>Alibaba Cloud API + MySQL</div>
+            <div><strong>当前工作空间：</strong>{gistId}</div>
+            <div><strong>同步状态：</strong>{syncStatus === "ok" ? "已同步" : syncStatus === "error" ? "连接失败" : "同步中"}</div>
           </div>
-          {gistToken ? (
-            <div className="inline-actions">
-              <button className="btn btn-outline" onClick={pullFromCloud}>↓ 从云端恢复</button>
-              <button className="btn btn-danger" onClick={disconnectCloud}>断开本次会话</button>
-              <button className="btn btn-outline" onClick={forgetCloud}>移除 Gist 配置</button>
-            </div>
-          ) : (
-            <>
-              <p className="settings-note" style={{ marginTop: 10 }}>
-                Token 不再写入 `localStorage`。如果你已经有 Gist ID，只要重新输入 Token 就能继续同步。
-              </p>
-              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                <input
-                  className="field-input"
-                  style={{ flex: 1 }}
-                  type="password"
-                  placeholder="粘贴 GitHub Token（需要 gist 权限）"
-                  value={tokenInput}
-                  onChange={(event) => setTokenInput(event.target.value)}
-                />
-                <button className="btn btn-primary" onClick={connectCloud}>连接</button>
-              </div>
-            </>
-          )}
+          <p className="settings-note" style={{ marginTop: 10 }}>
+            当前版本以服务端数据库作为唯一真实数据源。本地 localStorage 继续保留用于缓存和备份，不再使用 GitHub Gist 作为主同步方式。
+          </p>
+          <div className="inline-actions">
+            <button className="btn btn-outline" onClick={pullFromCloud}>↓ 从服务端刷新</button>
+          </div>
         </div>
 
         <div className="data-section">
@@ -935,9 +917,9 @@ function App() {
         <div className="data-section">
           <div className="data-section-title">使用说明</div>
           <div className="settings-note">
-            <p>1. 截止时间现在分为“日期”和“说明”两种模式，日期型可以稳定排序。</p>
-            <p>2. 云端出现更新冲突时，顶部会要求先决定保留本地还是使用云端，避免静默覆盖。</p>
-            <p>3. 导入、重置、切换到云端版本前都会自动留一份本地备份。</p>
+            <p>1. 数据会优先写入服务端，再同步到其他设备，跨端一致性会比 Gist 方案稳定。</p>
+            <p>2. 如果其他设备已经写入了新版本，顶部仍会提示你决定保留本地还是采用服务端版本。</p>
+            <p>3. 导入、重置、覆盖服务端版本之前，系统仍会自动保留一份本地备份。</p>
           </div>
         </div>
       </Modal>
