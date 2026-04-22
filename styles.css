@@ -791,7 +791,7 @@ textarea {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 8px 12px 92px;
+  padding: 8px 12px calc(168px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -838,7 +838,7 @@ textarea {
   padding: 12px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 10px;
 }
 
@@ -875,7 +875,8 @@ textarea {
   display: grid;
   gap: 6px;
   flex-shrink: 0;
-  align-self: center;
+  align-self: stretch;
+  width: 108px;
 }
 
 .mobile-mini-btn {
@@ -889,6 +890,7 @@ textarea {
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  width: 100%;
 }
 
 .mobile-plan-divider {
@@ -909,11 +911,66 @@ textarea {
 }
 
 .mobile-plan-item {
+  display: block;
+  padding: 8px 0;
+  min-height: 0;
+}
+
+.mobile-plan-row {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 8px 0;
-  min-height: 0;
+}
+
+.mobile-plan-check {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  border: 2px solid #d8dbe6;
+  background: #fff;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-top: 1px;
+}
+
+.mobile-plan-check.done {
+  border-color: #22c55e;
+  background: #22c55e;
+}
+
+.mobile-plan-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-plan-title {
+  font-size: 14px;
+  line-height: 1.45;
+  color: #222;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.mobile-plan-title.done {
+  color: #9aa1b1;
+  text-decoration: line-through;
+}
+
+.mobile-plan-detail {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #7a8091;
+  word-break: break-word;
+}
+
+.mobile-plan-detail.done {
+  color: #b0b5c2;
+  text-decoration: line-through;
 }
 
 .mobile-empty-day {

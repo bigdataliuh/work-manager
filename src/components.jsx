@@ -161,6 +161,26 @@ function renderPlanItem(item, onToggle, compact = false) {
   );
 }
 
+function renderMobilePlanItem(item, onToggle) {
+  const label = item.title || item.content.split("\n")[0];
+  return (
+    <div className="mobile-plan-row">
+      <button
+        type="button"
+        className={`mobile-plan-check ${item.done ? "done" : ""}`}
+        onClick={onToggle}
+        aria-label={item.done ? "mark undone" : "mark done"}
+      >
+        {item.done ? "✓" : ""}
+      </button>
+      <div className="mobile-plan-copy">
+        <div className={`mobile-plan-title ${item.done ? "done" : ""}`}>{label}</div>
+        {item.title && item.content ? <div className={`mobile-plan-detail ${item.done ? "done" : ""}`}>{item.content}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 export function MobileTaskCard({ task, day, getItems, onToggleItemDone, onEditTask, onEditCell, setCellItems }) {
   const items = getItems(task, day);
   const hasItems = items && items.length > 0;
@@ -193,7 +213,7 @@ export function MobileTaskCard({ task, day, getItems, onToggleItemDone, onEditTa
             <div className="mobile-plan-label">今日计划</div>
             {items.map((item, index) => (
               <div key={`${task.id}-${day}-${index}`} className="mobile-plan-item" style={{ borderBottom: index < items.length - 1 ? "1px solid #f5f5f5" : "none" }}>
-                {renderPlanItem(item, () => onToggleItemDone(task.id, day, index))}
+                {renderMobilePlanItem(item, () => onToggleItemDone(task.id, day, index))}
               </div>
             ))}
           </div>

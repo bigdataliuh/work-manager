@@ -21850,57 +21850,18 @@
       }
     ) : null, task.deadlineMode === "none" ? /* @__PURE__ */ import_react.default.createElement("div", { className: "field-help" }, "\u4E0D\u8BBE\u7F6E\u622A\u6B62\u65F6\u95F4\u3002") : null);
   }
-  function renderPlanItem(item, onToggle, compact = false) {
+  function renderMobilePlanItem(item, onToggle) {
     const label = item.title || item.content.split("\n")[0];
-    return /* @__PURE__ */ import_react.default.createElement(
-      "div",
+    return /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-row" }, /* @__PURE__ */ import_react.default.createElement(
+      "button",
       {
-        key: `${label}-${item.content}`,
-        style: {
-          display: "flex",
-          alignItems: compact ? "center" : "flex-start",
-          gap: compact ? 4 : 10,
-          padding: compact ? 0 : "6px 0",
-          borderBottom: compact ? "none" : void 0
-        }
+        type: "button",
+        className: `mobile-plan-check ${item.done ? "done" : ""}`,
+        onClick: onToggle,
+        "aria-label": item.done ? "mark undone" : "mark done"
       },
-      /* @__PURE__ */ import_react.default.createElement(
-        "span",
-        {
-          onClick: onToggle,
-          style: {
-            flexShrink: 0,
-            width: compact ? 14 : 20,
-            height: compact ? 14 : 20,
-            marginTop: compact ? 0 : 2,
-            borderRadius: compact ? 3 : 5,
-            border: `${compact ? 1.5 : 2}px solid ${item.done ? "#22c55e" : "#ddd"}`,
-            background: item.done ? "#22c55e" : "transparent",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer"
-          }
-        },
-        item.done ? /* @__PURE__ */ import_react.default.createElement("span", { style: { color: "#fff", fontSize: compact ? 10 : 13, lineHeight: 1 } }, "\u2713") : null
-      ),
-      /* @__PURE__ */ import_react.default.createElement("div", { style: { flex: 1, opacity: item.done ? 0.5 : 1 } }, compact ? /* @__PURE__ */ import_react.default.createElement(
-        "span",
-        {
-          style: {
-            fontSize: 12,
-            lineHeight: 1.4,
-            color: item.done ? "#aaa" : "#333",
-            textDecoration: item.done ? "line-through" : "none",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            display: "block"
-          }
-        },
-        label
-      ) : /* @__PURE__ */ import_react.default.createElement(import_react.default.Fragment, null, /* @__PURE__ */ import_react.default.createElement("div", { style: { fontSize: 14, fontWeight: 600, color: "#222", textDecoration: item.done ? "line-through" : "none", lineHeight: 1.4 } }, label), item.title && item.content ? /* @__PURE__ */ import_react.default.createElement("div", { style: { fontSize: 12, color: "#999", marginTop: 3, lineHeight: 1.5 } }, item.content) : null))
-    );
+      item.done ? "\u2713" : ""
+    ), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-copy" }, /* @__PURE__ */ import_react.default.createElement("div", { className: `mobile-plan-title ${item.done ? "done" : ""}` }, label), item.title && item.content ? /* @__PURE__ */ import_react.default.createElement("div", { className: `mobile-plan-detail ${item.done ? "done" : ""}` }, item.content) : null));
   }
   function MobileTaskCard({ task, day, getItems, onToggleItemDone, onEditTask, onEditCell, setCellItems }) {
     const items = getItems(task, day);
@@ -21910,7 +21871,7 @@
       onEditCell({ taskId: task.id, day });
       setCellItems(hasItems ? items.map((item) => ({ ...item })) : [{ title: "", content: "", done: false }]);
     }
-    return /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-card", style: { borderLeftColor: catColor(task.category) } }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-header" }, /* @__PURE__ */ import_react.default.createElement("div", { style: { flex: 1, minWidth: 0 }, onClick: () => onEditTask({ ...task }) }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-name" }, task.name), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-meta-row" }, /* @__PURE__ */ import_react.default.createElement("span", { className: "mobile-task-meta-pill", style: { background: `${catColor(task.category)}12`, color: catColor(task.category) } }, task.category), deadline ? /* @__PURE__ */ import_react.default.createElement("span", { className: "mobile-task-meta-text" }, "\u622A\u6B62 ", deadline) : null)), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-quick-actions" }, /* @__PURE__ */ import_react.default.createElement("button", { className: "mobile-mini-btn", onClick: openPlanEditor }, hasItems ? "\u8BB0\u5F55\u8BA1\u5212" : "\u8BB0\u5F55\u4ECA\u65E5\u8BA1\u5212"), /* @__PURE__ */ import_react.default.createElement("button", { className: "mobile-mini-btn", onClick: () => onEditTask({ ...task }) }, "\u7F16\u8F91"))), hasItems ? /* @__PURE__ */ import_react.default.createElement(import_react.default.Fragment, null, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-divider" }), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-area" }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-label" }, "\u4ECA\u65E5\u8BA1\u5212"), items.map((item, index) => /* @__PURE__ */ import_react.default.createElement("div", { key: `${task.id}-${day}-${index}`, className: "mobile-plan-item", style: { borderBottom: index < items.length - 1 ? "1px solid #f5f5f5" : "none" } }, renderPlanItem(item, () => onToggleItemDone(task.id, day, index)))))) : null);
+    return /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-card", style: { borderLeftColor: catColor(task.category) } }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-header" }, /* @__PURE__ */ import_react.default.createElement("div", { style: { flex: 1, minWidth: 0 }, onClick: () => onEditTask({ ...task }) }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-name" }, task.name), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-meta-row" }, /* @__PURE__ */ import_react.default.createElement("span", { className: "mobile-task-meta-pill", style: { background: `${catColor(task.category)}12`, color: catColor(task.category) } }, task.category), deadline ? /* @__PURE__ */ import_react.default.createElement("span", { className: "mobile-task-meta-text" }, "\u622A\u6B62 ", deadline) : null)), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-quick-actions" }, /* @__PURE__ */ import_react.default.createElement("button", { className: "mobile-mini-btn", onClick: openPlanEditor }, hasItems ? "\u8BB0\u5F55\u8BA1\u5212" : "\u8BB0\u5F55\u4ECA\u65E5\u8BA1\u5212"), /* @__PURE__ */ import_react.default.createElement("button", { className: "mobile-mini-btn", onClick: () => onEditTask({ ...task }) }, "\u7F16\u8F91"))), hasItems ? /* @__PURE__ */ import_react.default.createElement(import_react.default.Fragment, null, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-divider" }), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-area" }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-label" }, "\u4ECA\u65E5\u8BA1\u5212"), items.map((item, index) => /* @__PURE__ */ import_react.default.createElement("div", { key: `${task.id}-${day}-${index}`, className: "mobile-plan-item", style: { borderBottom: index < items.length - 1 ? "1px solid #f5f5f5" : "none" } }, renderMobilePlanItem(item, () => onToggleItemDone(task.id, day, index)))))) : null);
   }
   function MobileView({
     data,
