@@ -21594,22 +21594,11 @@
       status: "\u8FDB\u884C\u4E2D"
     };
   }
-  function createSeedTasks() {
-    return [
-      { name: "\u671D\u5929\u5BAB\u9879\u76EE-\u8BED\u6599\u7F16\u5199", category: "\u9879\u76EE", status: "\u8FDB\u884C\u4E2D", priority: "\u9AD8", responsible: "\u6211", participants: "\u90B5\u9896\u56E2\u961F", deadlineMode: "text", deadlineText: "4/24", dailyActions: {} },
-      { name: "\u671D\u5929\u5BAB\u9879\u76EE-\u7D20\u6750\u91C7\u96C6", category: "\u9879\u76EE", status: "\u5F85\u542F\u52A8", priority: "\u9AD8", responsible: "\u4E8E\u5E06", participants: "rokid\u674E\u6E90", deadlineMode: "text", deadlineText: "4/24", dailyActions: {} },
-      { name: "rokid\u5408\u4F5C\u6A21\u5F0F\u8C08\u5224", category: "\u5546\u52A1", status: "\u8FDB\u884C\u4E2D", priority: "\u9AD8", responsible: "\u6211", participants: "\u51AF", deadlineMode: "text", deadlineText: "\u672C\u5468\u4E94", dailyActions: {} },
-      { name: "\u5DE5\u4FE1\u5546\u52A1\u6D88\u5316", category: "\u5546\u52A1", status: "\u8FDB\u884C\u4E2D", priority: "\u9AD8", responsible: "\u6211", participants: "", deadlineMode: "text", deadlineText: "\u6301\u7EED", dailyActions: {} },
-      { name: "\u4E09\u53F0\u673A\u5668\u4EBA\u5BF9\u63A5", category: "\u5F00\u53D1", status: "\u8FDB\u884C\u4E2D", priority: "\u4E2D", responsible: "\u6211", participants: "\u5357\u5927", deadlineMode: "text", deadlineText: "\u6301\u7EED", dailyActions: {} },
-      { name: "\u77E5\u8BC6\u5E93\u7EF4\u62A4", category: "\u5F00\u53D1", status: "\u8FDB\u884C\u4E2D", priority: "\u4E2D", responsible: "\u6211", participants: "", deadlineMode: "text", deadlineText: "\u6301\u7EED", dailyActions: {} },
-      { name: "\u4E66\u8BB0\u76EF\u529E\u4E8B\u9879", category: "\u4E34\u65F6\u4EFB\u52A1", status: "\u8FDB\u884C\u4E2D", priority: "\u9AD8", responsible: "\u6211", participants: "", deadlineMode: "none", deadlineText: "", dailyActions: {} }
-    ].map((task) => normalizeTask(task));
-  }
   function defaultData() {
     return {
       schemaVersion: 3,
-      _lastModified: Date.now(),
-      tasks: createSeedTasks(),
+      _lastModified: 0,
+      tasks: [],
       archivedTasks: []
     };
   }
@@ -21762,7 +21751,7 @@
     return json?.state || createEmptyRemoteState();
   }
   function getSessionToken() {
-    return sessionStorage.getItem(SESSION_TOKEN_KEY) || CONNECTED_SESSION;
+    return sessionStorage.getItem(SESSION_TOKEN_KEY) || (localStorage.getItem(GIST_ID_KEY) ? CONNECTED_SESSION : "");
   }
   function setSessionToken(_token) {
     sessionStorage.setItem(SESSION_TOKEN_KEY, CONNECTED_SESSION);
@@ -21771,7 +21760,7 @@
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
   }
   function getSavedGistId() {
-    return localStorage.getItem(GIST_ID_KEY) || DEFAULT_WORKSPACE_ID;
+    return localStorage.getItem(GIST_ID_KEY) || "";
   }
   function setSavedGistId(gistId) {
     localStorage.setItem(GIST_ID_KEY, gistId || DEFAULT_WORKSPACE_ID);
@@ -22115,6 +22104,10 @@
     const fileRef = (0, import_react2.useRef)(null);
     const syncTimerRef = (0, import_react2.useRef)(null);
     const todayColRef = (0, import_react2.useRef)(null);
+    const hasInitializedRemoteRef = (0, import_react2.useRef)(false);
+    function hasCloudData(state) {
+      return Boolean(state?.tasks?.length || state?.archivedTasks?.length);
+    }
     function pushToast(message, type = "success") {
       setToasts((current) => [...current, createToast(message, type)]);
     }
@@ -22136,6 +22129,7 @@
     (0, import_react2.useEffect)(() => {
       if (!gistToken || !gistId) return void 0;
       let active = true;
+      hasInitializedRemoteRef.current = false;
       setSyncStatus("syncing");
       gistLoad(gistToken, gistId).then((remote) => {
         if (!active || !remote?.tasks) {
@@ -22143,6 +22137,13 @@
           return;
         }
         const normalizedRemote = normalizeData(remote);
+        hasInitializedRemoteRef.current = true;
+        if (!hasCloudData(data) && hasCloudData(normalizedRemote)) {
+          dispatch({ type: "replace", data: normalizedRemote });
+          setRemoteUpdate(null);
+          setSyncStatus("ok");
+          return;
+        }
         if (normalizedRemote._lastModified > data._lastModified + 5e3) {
           setRemoteUpdate(normalizedRemote);
           setSyncStatus("ok");
@@ -22171,6 +22172,7 @@
     }, [gistToken, gistId, data._lastModified]);
     (0, import_react2.useEffect)(() => {
       if (!gistToken || !gistId) return void 0;
+      if (!hasInitializedRemoteRef.current) return void 0;
       if (remoteUpdate && remoteUpdate._lastModified > data._lastModified + 5e3) return void 0;
       window.clearTimeout(syncTimerRef.current);
       syncTimerRef.current = window.setTimeout(async () => {

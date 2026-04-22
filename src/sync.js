@@ -2,7 +2,7 @@ export const GIST_ID_KEY = "work-mgr-server-workspace";
 export const SESSION_TOKEN_KEY = "work-mgr-server-sync-session";
 
 const REVISION_KEY = "work-mgr-server-revision";
-const DEFAULT_WORKSPACE_ID = "primary";
+export const DEFAULT_WORKSPACE_ID = "primary";
 const CONNECTED_SESSION = "server-sync";
 
 function normalizeApiBase(base) {
@@ -92,7 +92,7 @@ export async function gistLoad(_token, _gistId) {
 }
 
 export function getSessionToken() {
-  return sessionStorage.getItem(SESSION_TOKEN_KEY) || CONNECTED_SESSION;
+  return sessionStorage.getItem(SESSION_TOKEN_KEY) || (localStorage.getItem(GIST_ID_KEY) ? CONNECTED_SESSION : "");
 }
 
 export function setSessionToken(_token) {
@@ -104,7 +104,7 @@ export function clearSessionToken() {
 }
 
 export function getSavedGistId() {
-  return localStorage.getItem(GIST_ID_KEY) || DEFAULT_WORKSPACE_ID;
+  return localStorage.getItem(GIST_ID_KEY) || "";
 }
 
 export function setSavedGistId(gistId) {

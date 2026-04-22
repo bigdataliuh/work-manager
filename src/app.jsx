@@ -144,6 +144,11 @@ function App() {
   const fileRef = useRef(null);
   const syncTimerRef = useRef(null);
   const todayColRef = useRef(null);
+  const hasInitializedRemoteRef = useRef(false);
+
+  function hasCloudData(state) {
+    return Boolean(state?.tasks?.length || state?.archivedTasks?.length);
+  }
 
   function pushToast(message, type = "success") {
     setToasts((current) => [...current, createToast(message, type)]);
@@ -171,6 +176,7 @@ function App() {
     if (!gistToken || !gistId) return undefined;
 
     let active = true;
+    hasInitializedRemoteRef.current = false;
     setSyncStatus("syncing");
 
     gistLoad(gistToken, gistId)
@@ -181,6 +187,15 @@ function App() {
         }
 
         const normalizedRemote = normalizeData(remote);
+        hasInitializedRemoteRef.current = true;
+
+        if (!hasCloudData(data) && hasCloudData(normalizedRemote)) {
+          dispatch({ type: "replace", data: normalizedRemote });
+          setRemoteUpdate(null);
+          setSyncStatus("ok");
+          return;
+        }
+
         if (normalizedRemote._lastModified > data._lastModified + 5000) {
           setRemoteUpdate(normalizedRemote);
           setSyncStatus("ok");
@@ -214,6 +229,7 @@ function App() {
 
   useEffect(() => {
     if (!gistToken || !gistId) return undefined;
+    if (!hasInitializedRemoteRef.current) return undefined;
     if (remoteUpdate && remoteUpdate._lastModified > data._lastModified + 5000) return undefined;
 
     window.clearTimeout(syncTimerRef.current);

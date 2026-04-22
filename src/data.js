@@ -187,8 +187,8 @@ function createSeedTasks() {
 export function defaultData() {
   return {
     schemaVersion: 3,
-    _lastModified: Date.now(),
-    tasks: createSeedTasks(),
+    _lastModified: 0,
+    tasks: [],
     archivedTasks: []
   };
 }
