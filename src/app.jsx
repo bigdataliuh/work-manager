@@ -187,11 +187,18 @@ function App() {
         }
 
         const normalizedRemote = normalizeData(remote);
+        const remoteHasData = hasCloudData(normalizedRemote);
+        const localHasData = hasCloudData(data);
         hasInitializedRemoteRef.current = true;
 
-        if (!hasCloudData(data) && hasCloudData(normalizedRemote)) {
+        if (remoteHasData) {
           dispatch({ type: "replace", data: normalizedRemote });
           setRemoteUpdate(null);
+          setSyncStatus("ok");
+          return;
+        }
+
+        if (!remoteHasData && localHasData) {
           setSyncStatus("ok");
           return;
         }
