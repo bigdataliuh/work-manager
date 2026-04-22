@@ -416,7 +416,9 @@ textarea {
   width: 420px;
   max-width: 95vw;
   max-height: 90vh;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 20px 60px rgba(0,0,0,0.2);
 }
 
@@ -426,6 +428,7 @@ textarea {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .modal-title {
@@ -446,6 +449,9 @@ textarea {
 
 .modal-body {
   padding: 16px 22px 22px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .field { margin-bottom: 14px; }
@@ -986,19 +992,39 @@ textarea {
   .btn { font-size: 12px; padding: 5px 10px; }
   .modal-overlay {
     align-items: flex-end;
-    padding: 8px;
+    padding: max(8px, env(safe-area-inset-top)) 8px 0;
   }
   .modal-box {
     width: 100% !important;
     max-width: 100%;
-    max-height: calc(100vh - 12px);
+    max-height: calc(100dvh - env(safe-area-inset-top) - 8px);
     border-radius: 18px 18px 0 0;
   }
   .modal-header {
-    padding: 16px 16px 12px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #fff;
+    padding: 14px 16px 12px;
+    min-height: 52px;
   }
   .modal-body {
-    padding: 14px 16px 18px;
+    flex: 1;
+    min-height: 0;
+    padding: 14px 16px calc(18px + env(safe-area-inset-bottom));
+  }
+  .modal-title {
+    padding-right: 12px;
+  }
+  .modal-close {
+    flex-shrink: 0;
+    min-width: 32px;
+    min-height: 32px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #f5f6fa;
   }
   .field-row {
     grid-template-columns: 1fr;
