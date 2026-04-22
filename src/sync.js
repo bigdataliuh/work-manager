@@ -73,13 +73,28 @@ export async function gistCreate(_token, data) {
 }
 
 export async function gistUpdate(_token, _gistId, data) {
-  const json = await request("/state", {
-    method: "PUT",
-    body: JSON.stringify({
-      state: data,
-      baseRevision: readStoredRevision()
-    })
-  });
+  async function putState() {
+    return request("/state", {
+      method: "PUT",
+      body: JSON.stringify({
+        state: data,
+        baseRevision: readStoredRevision()
+      })
+    });
+  }
+
+  let json;
+  try {
+    json = await putState();
+  } catch (error) {
+    if (error?.status !== 409 || typeof error?.payload?.revision !== "number") {
+      throw error;
+    }
+
+    // Last writer wins: refresh the revision from the server, then retry once.
+    writeStoredRevision(error.payload.revision);
+    json = await putState();
+  }
 
   writeStoredRevision(json.revision || 0);
   return true;
@@ -92,7 +107,7 @@ export async function gistLoad(_token, _gistId) {
 }
 
 export function getSessionToken() {
-  return sessionStorage.getItem(SESSION_TOKEN_KEY) || (localStorage.getItem(GIST_ID_KEY) ? CONNECTED_SESSION : "");
+  return sessionStorage.getItem(SESSION_TOKEN_KEY) || CONNECTED_SESSION;
 }
 
 export function setSessionToken(_token) {
@@ -104,7 +119,7 @@ export function clearSessionToken() {
 }
 
 export function getSavedGistId() {
-  return localStorage.getItem(GIST_ID_KEY) || "";
+  return localStorage.getItem(GIST_ID_KEY) || DEFAULT_WORKSPACE_ID;
 }
 
 export function setSavedGistId(gistId) {

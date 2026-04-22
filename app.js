@@ -21735,13 +21735,25 @@
     return DEFAULT_WORKSPACE_ID;
   }
   async function gistUpdate(_token, _gistId, data) {
-    const json = await request("/state", {
-      method: "PUT",
-      body: JSON.stringify({
-        state: data,
-        baseRevision: readStoredRevision()
-      })
-    });
+    async function putState() {
+      return request("/state", {
+        method: "PUT",
+        body: JSON.stringify({
+          state: data,
+          baseRevision: readStoredRevision()
+        })
+      });
+    }
+    let json;
+    try {
+      json = await putState();
+    } catch (error) {
+      if (error?.status !== 409 || typeof error?.payload?.revision !== "number") {
+        throw error;
+      }
+      writeStoredRevision(error.payload.revision);
+      json = await putState();
+    }
     writeStoredRevision(json.revision || 0);
     return true;
   }
@@ -21751,7 +21763,7 @@
     return json?.state || createEmptyRemoteState();
   }
   function getSessionToken() {
-    return sessionStorage.getItem(SESSION_TOKEN_KEY) || (localStorage.getItem(GIST_ID_KEY) ? CONNECTED_SESSION : "");
+    return sessionStorage.getItem(SESSION_TOKEN_KEY) || CONNECTED_SESSION;
   }
   function setSessionToken(_token) {
     sessionStorage.setItem(SESSION_TOKEN_KEY, CONNECTED_SESSION);
@@ -21760,7 +21772,7 @@
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
   }
   function getSavedGistId() {
-    return localStorage.getItem(GIST_ID_KEY) || "";
+    return localStorage.getItem(GIST_ID_KEY) || DEFAULT_WORKSPACE_ID;
   }
   function setSavedGistId(gistId) {
     localStorage.setItem(GIST_ID_KEY, gistId || DEFAULT_WORKSPACE_ID);
