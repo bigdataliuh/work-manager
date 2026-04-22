@@ -141,10 +141,11 @@ function App() {
   const [toasts, setToasts] = useState([]);
   const [confirmState, setConfirmState] = useState(null);
   const [backupInfo, setBackupInfo] = useState(() => loadBackup());
+  const [hasInitializedRemote, setHasInitializedRemote] = useState(false);
   const fileRef = useRef(null);
   const syncTimerRef = useRef(null);
   const todayColRef = useRef(null);
-  const hasInitializedRemoteRef = useRef(false);
+  const latestDataRef = useRef(data);
 
   function hasCloudData(state) {
     return Boolean(state?.tasks?.length || state?.archivedTasks?.length);
@@ -164,6 +165,7 @@ function App() {
 
   useEffect(() => {
     saveData(data);
+    latestDataRef.current = data;
   }, [data]);
 
   useEffect(() => {
@@ -176,7 +178,7 @@ function App() {
     if (!gistToken || !gistId) return undefined;
 
     let active = true;
-    hasInitializedRemoteRef.current = false;
+    setHasInitializedRemote(false);
     setSyncStatus("syncing");
 
     gistLoad(gistToken, gistId)
@@ -188,8 +190,8 @@ function App() {
 
         const normalizedRemote = normalizeData(remote);
         const remoteHasData = hasCloudData(normalizedRemote);
-        const localHasData = hasCloudData(data);
-        hasInitializedRemoteRef.current = true;
+        const localHasData = hasCloudData(latestDataRef.current);
+        setHasInitializedRemote(true);
 
         if (remoteHasData) {
           dispatch({ type: "replace", data: normalizedRemote });
@@ -220,7 +222,7 @@ function App() {
         const remote = await gistLoad(gistToken, gistId);
         if (!remote?.tasks) return;
         const normalizedRemote = normalizeData(remote);
-        if (normalizedRemote._lastModified > data._lastModified + 5000) {
+        if (normalizedRemote._lastModified > latestDataRef.current._lastModified + 5000) {
           setRemoteUpdate(normalizedRemote);
         }
       } catch (error) {
@@ -232,11 +234,11 @@ function App() {
       active = false;
       window.clearInterval(poll);
     };
-  }, [gistToken, gistId, data._lastModified]);
+  }, [gistToken, gistId]);
 
   useEffect(() => {
     if (!gistToken || !gistId) return undefined;
-    if (!hasInitializedRemoteRef.current) return undefined;
+    if (!hasInitializedRemote) return undefined;
     if (remoteUpdate && remoteUpdate._lastModified > data._lastModified + 5000) return undefined;
 
     window.clearTimeout(syncTimerRef.current);
@@ -252,7 +254,7 @@ function App() {
     }, 1200);
 
     return () => window.clearTimeout(syncTimerRef.current);
-  }, [data, gistId, gistToken, remoteUpdate]);
+  }, [data, gistId, gistToken, remoteUpdate, hasInitializedRemote]);
 
   const monday = getMonday(new Date());
   monday.setDate(monday.getDate() + weekOffset * 7);
