@@ -164,6 +164,8 @@ function renderPlanItem(item, onToggle, compact = false) {
 export function MobileTaskCard({ task, day, getItems, onToggleItemDone, onEditTask, onEditCell, setCellItems }) {
   const items = getItems(task, day);
   const hasItems = items && items.length > 0;
+  const deadline = formatDeadline(task);
+  const people = [task.responsible, task.participants].filter(Boolean).join(" / ");
 
   function openPlanEditor() {
     onEditCell({ taskId: task.id, day });
@@ -175,6 +177,12 @@ export function MobileTaskCard({ task, day, getItems, onToggleItemDone, onEditTa
       <div className="mobile-task-header">
         <div style={{ flex: 1, minWidth: 0 }} onClick={() => onEditTask({ ...task })}>
           <div className="mobile-task-name">{task.name}</div>
+          <div className="mobile-task-meta-row">
+            <span className="mobile-task-meta-pill" style={{ background: `${catColor(task.category)}12`, color: catColor(task.category) }}>{task.category}</span>
+            {deadline ? <span className="mobile-task-meta-text">截止 {deadline}</span> : null}
+            {hasItems ? <span className="mobile-task-meta-text">{items.length} 条记录</span> : null}
+          </div>
+          {people ? <div className="mobile-task-people">{people}</div> : null}
           <div className="mobile-task-badges">
             <PBadge priority={task.priority} small />
             <SBadge status={task.status} small />

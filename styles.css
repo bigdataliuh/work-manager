@@ -674,15 +674,15 @@ textarea {
 .toast.warning { border-left-color: #d48806; }
 
 .mobile-search {
-  padding: 8px 14px 0;
+  padding: 6px 12px 0;
 }
 
 .mobile-search input {
   width: 100%;
-  padding: 8px 14px;
+  padding: 7px 12px;
   border: 1.5px solid #eee;
   border-radius: 20px;
-  font-size: 14px;
+  font-size: 13px;
   outline: none;
   background: #fafafa;
   box-sizing: border-box;
@@ -701,7 +701,7 @@ textarea {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding: 10px 14px 12px;
+  padding: 8px 12px 10px;
   scrollbar-width: none;
 }
 
@@ -713,8 +713,8 @@ textarea {
   background: #fff;
   color: var(--text-secondary);
   border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 5px 11px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -728,7 +728,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   overflow-x: auto;
   background: var(--card-bg);
   border-bottom: 1px solid var(--border);
@@ -743,7 +743,7 @@ textarea {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 7px 0;
+  padding: 6px 0;
   border-radius: 12px;
   cursor: pointer;
   flex: 1;
@@ -773,7 +773,7 @@ textarea {
 .mobile-day-chip.active .mobile-day-chip-label { color: rgba(255,255,255,0.85); }
 
 .mobile-day-chip-num {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
 }
@@ -785,17 +785,17 @@ textarea {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 10px 14px 104px;
+  padding: 8px 12px 92px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .mobile-day-summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 8px 12px;
   background: #fff;
   border-bottom: 1px solid #f1f1f1;
   flex-shrink: 0;
@@ -808,43 +808,79 @@ textarea {
 
 .mobile-day-summary-count {
   margin-top: 2px;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
 }
 
+.mobile-day-summary-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+  flex-shrink: 0;
+}
+
 .mobile-task-card {
   background: var(--card-bg);
-  border-radius: 14px;
+  border-radius: 13px;
   border-left: 4px solid #ccc;
   box-shadow: 0 2px 8px rgba(0,0,0,0.07);
   overflow: hidden;
 }
 
 .mobile-task-header {
-  padding: 12px 14px 10px;
+  padding: 11px 12px 8px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
 }
 
 .mobile-task-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
-  line-height: 1.3;
+  line-height: 1.35;
+}
+
+.mobile-task-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.mobile-task-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mobile-task-meta-text {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.mobile-task-people {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
 }
 
 .mobile-task-badges {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
-  margin-top: 5px;
+  margin-top: 6px;
 }
 
 .mobile-task-quick-actions {
-  display: flex;
+  display: grid;
   gap: 6px;
   flex-shrink: 0;
 }
@@ -853,9 +889,9 @@ textarea {
   border: 1px solid #e6e8ef;
   background: #f7f8fc;
   color: #4a5568;
-  border-radius: 10px;
-  padding: 7px 10px;
-  font-size: 12px;
+  border-radius: 9px;
+  padding: 6px 9px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -863,11 +899,11 @@ textarea {
 .mobile-plan-divider {
   height: 1px;
   background: var(--border-light);
-  margin: 0 14px 8px;
+  margin: 0 12px 6px;
 }
 
 .mobile-plan-area {
-  padding: 8px 14px 12px;
+  padding: 6px 12px 10px;
 }
 
 .mobile-plan-item {
@@ -878,9 +914,9 @@ textarea {
 }
 
 .mobile-plan-add {
-  padding: 8px 0 0;
+  padding: 6px 0 0;
   color: var(--accent);
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   font-weight: 500;
 }
@@ -909,12 +945,12 @@ textarea {
   z-index: 30;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  padding: 8px;
+  gap: 6px;
+  padding: 6px;
   background: rgba(255,255,255,0.96);
   border: 1px solid rgba(226,232,240,0.95);
-  border-radius: 18px;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+  border-radius: 16px;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
   backdrop-filter: blur(14px);
 }
 
@@ -922,14 +958,14 @@ textarea {
   border: none;
   background: transparent;
   color: #4a5568;
-  min-height: 52px;
-  border-radius: 14px;
+  min-height: 46px;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  font-size: 11px;
+  gap: 2px;
+  font-size: 10px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -940,7 +976,7 @@ textarea {
 }
 
 .mobile-bottom-icon {
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1;
 }
 
