@@ -1,5 +1,5 @@
 import React from "react";
-import { CATEGORIES, PRIORITY_OPTIONS, STATUS_OPTIONS, catColor, dateKey, dayLabel, formatDeadline, getMonday, isToday } from "./data.js";
+import { PRIORITY_OPTIONS, STATUS_OPTIONS, catColor, dateKey, dayLabel, formatDeadline, getMonday, isToday } from "./data.js";
 
 export function PBadge({ priority, small = false }) {
   const cls = priority === "高" ? "badge-priority-high" : priority === "中" ? "badge-priority-mid" : "badge-priority-low";
@@ -225,6 +225,7 @@ export function MobileTaskCard({ task, day, getItems, onToggleItemDone, onEditTa
 
 export function MobileView({
   data,
+  categories,
   mobileDay,
   setMobileDay,
   searchQuery,
@@ -252,7 +253,7 @@ export function MobileView({
           <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="🔍 搜索任务…" />
         </div>
         <div className="mobile-filter-strip">
-          {["全部", ...CATEGORIES].map((category) => (
+          {["全部", ...categories].map((category) => (
             <button
               key={category}
               className={`mobile-filter-chip ${filterCat === category ? "active" : ""}`}
@@ -324,7 +325,7 @@ export function MobileView({
   );
 }
 
-export function TaskForm({ task, setTask }) {
+export function TaskForm({ task, setTask, categories }) {
   function updateField(key, value) {
     setTask((current) => ({ ...current, [key]: value }));
   }
@@ -347,7 +348,7 @@ export function TaskForm({ task, setTask }) {
     <>
       <Field label="任务名称" value={task.name} onChange={(value) => updateField("name", value)} placeholder="如：朝天宫项目-现场测试" />
       <div className="field-row">
-        <Field label="分类" value={task.category} onChange={(value) => updateField("category", value)} options={CATEGORIES} />
+        <Field label="分类" value={task.category} onChange={(value) => updateField("category", value)} options={categories} />
         <Field label="优先级" value={task.priority} onChange={(value) => updateField("priority", value)} options={PRIORITY_OPTIONS} />
       </div>
       <div className="field-row">

@@ -1,22 +1,56 @@
 import { getDbPool } from "./db.js";
 
 const WORKSPACE_ROW_ID = 1;
+const DEFAULT_CATEGORIES = ["项目", "商务", "开发", "日常任务", "临时任务", "机器人"];
+
+function normalizeCategoryName(category) {
+  if (typeof category !== "string") return "";
+  const trimmed = category.trim();
+  return trimmed === "活动" ? "机器人" : trimmed;
+}
+
+function normalizeCategories(rawCategories, taskLists = []) {
+  const categories = [];
+  const seen = new Set();
+
+  function pushCategory(category) {
+    const normalized = normalizeCategoryName(category);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    categories.push(normalized);
+  }
+
+  if (Array.isArray(rawCategories) && rawCategories.length) {
+    rawCategories.forEach(pushCategory);
+  } else {
+    DEFAULT_CATEGORIES.forEach(pushCategory);
+  }
+
+  taskLists.flat().forEach((task) => pushCategory(task?.category));
+
+  return categories.length ? categories : [...DEFAULT_CATEGORIES];
+}
 
 function normalizeStateShape(state) {
   if (!state || typeof state !== "object") {
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       _lastModified: 0,
+      categories: [...DEFAULT_CATEGORIES],
       tasks: [],
       archivedTasks: []
     };
   }
 
+  const rawTasks = Array.isArray(state.tasks) ? state.tasks : [];
+  const rawArchivedTasks = Array.isArray(state.archivedTasks) ? state.archivedTasks : [];
+
   return {
-    schemaVersion: typeof state.schemaVersion === "number" ? state.schemaVersion : 3,
+    schemaVersion: typeof state.schemaVersion === "number" ? state.schemaVersion : 4,
     _lastModified: typeof state._lastModified === "number" ? state._lastModified : Date.now(),
-    tasks: Array.isArray(state.tasks) ? state.tasks : [],
-    archivedTasks: Array.isArray(state.archivedTasks) ? state.archivedTasks : []
+    categories: normalizeCategories(state.categories, [rawTasks, rawArchivedTasks]),
+    tasks: rawTasks,
+    archivedTasks: rawArchivedTasks
   };
 }
 

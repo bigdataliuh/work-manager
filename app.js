@@ -21456,21 +21456,47 @@
   // src/data.js
   var STORAGE_KEY = "work-mgr-v3";
   var BACKUP_KEY = "work-mgr-local-backup";
-  var CATEGORIES = ["\u9879\u76EE", "\u6D3B\u52A8", "\u5546\u52A1", "\u5F00\u53D1", "\u4E34\u65F6\u4EFB\u52A1"];
+  var CATEGORIES = ["\u9879\u76EE", "\u5546\u52A1", "\u5F00\u53D1", "\u65E5\u5E38\u4EFB\u52A1", "\u4E34\u65F6\u4EFB\u52A1", "\u673A\u5668\u4EBA"];
   var STATUS_OPTIONS = ["\u8FDB\u884C\u4E2D", "\u5F85\u542F\u52A8", "\u5DF2\u5B8C\u6210", "\u5DF2\u6401\u7F6E"];
   var PRIORITY_OPTIONS = ["\u9AD8", "\u4E2D", "\u4F4E"];
   var DEADLINE_MODES = ["none", "date", "text"];
   var CAT_COLORS = {
     \u9879\u76EE: "#C05046",
-    \u6D3B\u52A8: "#7030A0",
     \u5546\u52A1: "#2E75B6",
     \u5F00\u53D1: "#548235",
-    \u4E34\u65F6\u4EFB\u52A1: "#BF8F00"
+    \u65E5\u5E38\u4EFB\u52A1: "#0F766E",
+    \u4E34\u65F6\u4EFB\u52A1: "#BF8F00",
+    \u673A\u5668\u4EBA: "#7030A0"
+  };
+  var LEGACY_CATEGORY_MAP = {
+    \u6D3B\u52A8: "\u673A\u5668\u4EBA"
   };
   var PRIORITY_RANK = { \u9AD8: 0, \u4E2D: 1, \u4F4E: 2 };
   var STATUS_RANK = { \u8FDB\u884C\u4E2D: 0, \u5F85\u542F\u52A8: 1, \u5DF2\u6401\u7F6E: 2, \u5DF2\u5B8C\u6210: 3 };
   function catColor(category) {
     return CAT_COLORS[category] || "#64748b";
+  }
+  function normalizeCategoryName(category) {
+    if (typeof category !== "string") return "";
+    const trimmed = category.trim();
+    return LEGACY_CATEGORY_MAP[trimmed] || trimmed;
+  }
+  function normalizeCategories(rawCategories, taskLists = []) {
+    const categories = [];
+    const seen = /* @__PURE__ */ new Set();
+    function pushCategory(category) {
+      const normalized = normalizeCategoryName(category);
+      if (!normalized || seen.has(normalized)) return;
+      seen.add(normalized);
+      categories.push(normalized);
+    }
+    if (Array.isArray(rawCategories) && rawCategories.length) {
+      rawCategories.forEach(pushCategory);
+    } else {
+      CATEGORIES.forEach(pushCategory);
+    }
+    taskLists.flat().forEach((task) => pushCategory(task?.category));
+    return categories.length ? categories : [...CATEGORIES];
   }
   function genId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -21566,12 +21592,13 @@
     });
     return next;
   }
-  function normalizeTask(raw = {}) {
+  function normalizeTask(raw = {}, categories = CATEGORIES) {
     const deadlineFields = normalizeDeadlineFields(raw);
+    const normalizedCategory = normalizeCategoryName(raw.category);
     return {
       id: raw.id || genId(),
       name: typeof raw.name === "string" ? raw.name.trim() : "",
-      category: CATEGORIES.includes(raw.category) ? raw.category : CATEGORIES[0],
+      category: categories.includes(normalizedCategory) ? normalizedCategory : categories[0] || CATEGORIES[0],
       status: STATUS_OPTIONS.includes(raw.status) ? raw.status : STATUS_OPTIONS[0],
       priority: PRIORITY_OPTIONS.includes(raw.priority) ? raw.priority : PRIORITY_OPTIONS[0],
       responsible: typeof raw.responsible === "string" ? raw.responsible.trim() : "",
@@ -21581,10 +21608,10 @@
       ...deadlineFields
     };
   }
-  function createEmptyTask() {
+  function createEmptyTask(categories = CATEGORIES) {
     return {
       name: "",
-      category: "\u9879\u76EE",
+      category: categories[0] || CATEGORIES[0],
       priority: "\u9AD8",
       responsible: "\u6211",
       participants: "",
@@ -21596,19 +21623,24 @@
   }
   function defaultData() {
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       _lastModified: 0,
+      categories: [...CATEGORIES],
       tasks: [],
       archivedTasks: []
     };
   }
   function normalizeData(input) {
     if (!input || typeof input !== "object") return defaultData();
-    const tasks = Array.isArray(input.tasks) ? input.tasks.map(normalizeTask).filter((task) => task.name) : [];
-    const archivedTasks = Array.isArray(input.archivedTasks) ? input.archivedTasks.map((task) => normalizeTask({ ...task, status: "\u5DF2\u5B8C\u6210" })).filter((task) => task.name) : [];
+    const rawTasks = Array.isArray(input.tasks) ? input.tasks : [];
+    const rawArchivedTasks = Array.isArray(input.archivedTasks) ? input.archivedTasks : [];
+    const categories = normalizeCategories(input.categories, [rawTasks, rawArchivedTasks]);
+    const tasks = rawTasks.map((task) => normalizeTask(task, categories)).filter((task) => task.name);
+    const archivedTasks = rawArchivedTasks.map((task) => normalizeTask({ ...task, status: "\u5DF2\u5B8C\u6210" }, categories)).filter((task) => task.name);
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       _lastModified: typeof input._lastModified === "number" ? input._lastModified : Date.now(),
+      categories,
       tasks,
       archivedTasks
     };
@@ -21875,6 +21907,7 @@
   }
   function MobileView({
     data,
+    categories,
     mobileDay,
     setMobileDay,
     searchQuery,
@@ -21894,7 +21927,7 @@
       date.setDate(date.getDate() + index);
       return date;
     });
-    return /* @__PURE__ */ import_react.default.createElement(import_react.default.Fragment, null, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-toolbar" }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-search" }, /* @__PURE__ */ import_react.default.createElement("input", { value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "\u{1F50D} \u641C\u7D22\u4EFB\u52A1\u2026" })), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-filter-strip" }, ["\u5168\u90E8", ...CATEGORIES].map((category) => /* @__PURE__ */ import_react.default.createElement(
+    return /* @__PURE__ */ import_react.default.createElement(import_react.default.Fragment, null, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-toolbar" }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-search" }, /* @__PURE__ */ import_react.default.createElement("input", { value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "\u{1F50D} \u641C\u7D22\u4EFB\u52A1\u2026" })), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-filter-strip" }, ["\u5168\u90E8", ...categories].map((category) => /* @__PURE__ */ import_react.default.createElement(
       "button",
       {
         key: category,
@@ -21951,7 +21984,7 @@
       }
     ))));
   }
-  function TaskForm({ task, setTask }) {
+  function TaskForm({ task, setTask, categories }) {
     function updateField(key, value) {
       setTask((current) => ({ ...current, [key]: value }));
     }
@@ -21966,7 +21999,7 @@
       }
       setTask((current) => ({ ...current, deadlineMode: "text", deadlineDate: "", deadlineText: value || current.deadlineText }));
     }
-    return /* @__PURE__ */ import_react.default.createElement(import_react.default.Fragment, null, /* @__PURE__ */ import_react.default.createElement(Field, { label: "\u4EFB\u52A1\u540D\u79F0", value: task.name, onChange: (value) => updateField("name", value), placeholder: "\u5982\uFF1A\u671D\u5929\u5BAB\u9879\u76EE-\u73B0\u573A\u6D4B\u8BD5" }), /* @__PURE__ */ import_react.default.createElement("div", { className: "field-row" }, /* @__PURE__ */ import_react.default.createElement(Field, { label: "\u5206\u7C7B", value: task.category, onChange: (value) => updateField("category", value), options: CATEGORIES }), /* @__PURE__ */ import_react.default.createElement(Field, { label: "\u4F18\u5148\u7EA7", value: task.priority, onChange: (value) => updateField("priority", value), options: PRIORITY_OPTIONS })), /* @__PURE__ */ import_react.default.createElement("div", { className: "field-row" }, /* @__PURE__ */ import_react.default.createElement(Field, { label: "\u8D1F\u8D23\u4EBA", value: task.responsible, onChange: (value) => updateField("responsible", value), placeholder: "\u8C01\u8D1F\u8D23" }), /* @__PURE__ */ import_react.default.createElement(Field, { label: "\u53C2\u4E0E\u4EBA", value: task.participants, onChange: (value) => updateField("participants", value), placeholder: "\u534F\u4F5C\u65B9" })), /* @__PURE__ */ import_react.default.createElement("div", { className: "field-row" }, /* @__PURE__ */ import_react.default.createElement(DeadlineField, { task, onChange: updateDeadline }), /* @__PURE__ */ import_react.default.createElement(Field, { label: "\u72B6\u6001", value: task.status, onChange: (value) => updateField("status", value), options: STATUS_OPTIONS })));
+    return /* @__PURE__ */ import_react.default.createElement(import_react.default.Fragment, null, /* @__PURE__ */ import_react.default.createElement(Field, { label: "\u4EFB\u52A1\u540D\u79F0", value: task.name, onChange: (value) => updateField("name", value), placeholder: "\u5982\uFF1A\u671D\u5929\u5BAB\u9879\u76EE-\u73B0\u573A\u6D4B\u8BD5" }), /* @__PURE__ */ import_react.default.createElement("div", { className: "field-row" }, /* @__PURE__ */ import_react.default.createElement(Field, { label: "\u5206\u7C7B", value: task.category, onChange: (value) => updateField("category", value), options: categories }), /* @__PURE__ */ import_react.default.createElement(Field, { label: "\u4F18\u5148\u7EA7", value: task.priority, onChange: (value) => updateField("priority", value), options: PRIORITY_OPTIONS })), /* @__PURE__ */ import_react.default.createElement("div", { className: "field-row" }, /* @__PURE__ */ import_react.default.createElement(Field, { label: "\u8D1F\u8D23\u4EBA", value: task.responsible, onChange: (value) => updateField("responsible", value), placeholder: "\u8C01\u8D1F\u8D23" }), /* @__PURE__ */ import_react.default.createElement(Field, { label: "\u53C2\u4E0E\u4EBA", value: task.participants, onChange: (value) => updateField("participants", value), placeholder: "\u534F\u4F5C\u65B9" })), /* @__PURE__ */ import_react.default.createElement("div", { className: "field-row" }, /* @__PURE__ */ import_react.default.createElement(DeadlineField, { task, onChange: updateDeadline }), /* @__PURE__ */ import_react.default.createElement(Field, { label: "\u72B6\u6001", value: task.status, onChange: (value) => updateField("status", value), options: STATUS_OPTIONS })));
   }
   function ConfirmDialog({ open, title, message, confirmLabel, confirmTone = "dark", onConfirm, onClose }) {
     return /* @__PURE__ */ import_react.default.createElement(Modal, { open, onClose, title: title || "\u8BF7\u786E\u8BA4", width: 400 }, /* @__PURE__ */ import_react.default.createElement("div", { className: "dialog-text" }, message), /* @__PURE__ */ import_react.default.createElement("div", { className: "dialog-actions" }, /* @__PURE__ */ import_react.default.createElement("button", { className: "btn btn-outline", onClick: onClose }, "\u53D6\u6D88"), /* @__PURE__ */ import_react.default.createElement("button", { className: `btn ${confirmTone === "danger" ? "btn-danger" : "btn-dark"}`, onClick: onConfirm }, confirmLabel || "\u786E\u8BA4")));
@@ -21984,12 +22017,12 @@
       case "addTask":
         return updateTimestamp({
           ...state,
-          tasks: [...state.tasks, normalizeData({ tasks: [{ ...action.task, id: genId(), dailyActions: {} }], archivedTasks: [] }).tasks[0]]
+          tasks: [...state.tasks, normalizeData({ categories: state.categories, tasks: [{ ...action.task, id: genId(), dailyActions: {} }], archivedTasks: [] }).tasks[0]]
         });
       case "updateTask":
         return updateTimestamp({
           ...state,
-          tasks: state.tasks.map((task) => task.id === action.task.id ? normalizeData({ tasks: [{ ...task, ...action.task }], archivedTasks: [] }).tasks[0] : task)
+          tasks: state.tasks.map((task) => task.id === action.task.id ? normalizeData({ categories: state.categories, tasks: [{ ...task, ...action.task }], archivedTasks: [] }).tasks[0] : task)
         });
       case "archiveTask": {
         const target = state.tasks.find((task) => task.id === action.id);
@@ -22054,6 +22087,7 @@
     const [data, dispatch] = (0, import_react2.useReducer)(dataReducer, void 0, loadData);
     const [weekOffset, setWeekOffset] = (0, import_react2.useState)(0);
     const [filterCat, setFilterCat] = (0, import_react2.useState)("\u5168\u90E8");
+    const [desktopVisibility, setDesktopVisibility] = (0, import_react2.useState)("active");
     const [showAdd, setShowAdd] = (0, import_react2.useState)(false);
     const [showArchive, setShowArchive] = (0, import_react2.useState)(false);
     const [showSettings, setShowSettings] = (0, import_react2.useState)(false);
@@ -22061,7 +22095,7 @@
     const [editCell, setEditCell] = (0, import_react2.useState)(null);
     const [cellItems, setCellItems] = (0, import_react2.useState)([{ title: "", content: "", done: false }]);
     const [expandedCell, setExpandedCell] = (0, import_react2.useState)(null);
-    const [newTask, setNewTask] = (0, import_react2.useState)(createEmptyTask);
+    const [newTask, setNewTask] = (0, import_react2.useState)(() => createEmptyTask());
     const [gistToken, setGistToken] = (0, import_react2.useState)(() => getSessionToken());
     const [gistId, setGistId] = (0, import_react2.useState)(() => getSavedGistId());
     const [syncStatus, setSyncStatus] = (0, import_react2.useState)("idle");
@@ -22074,6 +22108,7 @@
     const [confirmState, setConfirmState] = (0, import_react2.useState)(null);
     const [backupInfo, setBackupInfo] = (0, import_react2.useState)(() => loadBackup());
     const [hasInitializedRemote, setHasInitializedRemote] = (0, import_react2.useState)(false);
+    const [collapsedCategories, setCollapsedCategories] = (0, import_react2.useState)({});
     const fileRef = (0, import_react2.useRef)(null);
     const syncTimerRef = (0, import_react2.useRef)(null);
     const todayColRef = (0, import_react2.useRef)(null);
@@ -22083,6 +22118,14 @@
     }
     function pushToast(message, type = "success") {
       setToasts((current) => [...current, createToast(message, type)]);
+    }
+    function applyStateUpdate(updater) {
+      dispatch({ type: "replace", data: updater(data) });
+    }
+    function backupAndApply(reason, updater) {
+      saveBackup(data, reason);
+      setBackupInfo(loadBackup());
+      applyStateUpdate(updater);
     }
     (0, import_react2.useEffect)(() => {
       if (!toasts.length) return void 0;
@@ -22100,6 +22143,16 @@
       window.addEventListener("resize", handleResize);
       return () => window.removeEventListener("resize", handleResize);
     }, []);
+    (0, import_react2.useEffect)(() => {
+      if (filterCat !== "\u5168\u90E8" && !data.categories.includes(filterCat)) {
+        setFilterCat("\u5168\u90E8");
+      }
+    }, [data.categories, filterCat]);
+    (0, import_react2.useEffect)(() => {
+      if (!data.categories.length) return;
+      setNewTask((current) => data.categories.includes(current.category) ? current : { ...current, category: data.categories[0] });
+      setEditTask((current) => current && !data.categories.includes(current.category) ? { ...current, category: data.categories[0] } : current);
+    }, [data.categories]);
     (0, import_react2.useEffect)(() => {
       if (!gistToken || !gistId) return void 0;
       let active = true;
@@ -22175,6 +22228,21 @@
       return date;
     });
     const query = searchQuery.trim().toLowerCase();
+    const weekStart = dateKey(days[0]);
+    const weekEnd = dateKey(days[6]);
+    function hasItemsThisWeek(task) {
+      return days.some((date) => Boolean(getCellItems(task, dateKey(date))));
+    }
+    function hasNearbyDeadline(task) {
+      if (task.deadlineMode !== "date" || !task.deadlineDate) return false;
+      return task.deadlineDate >= weekStart && task.deadlineDate <= weekEnd;
+    }
+    function isActiveTask(task) {
+      if (hasItemsThisWeek(task)) return true;
+      if (hasNearbyDeadline(task)) return true;
+      if (task.status === "\u8FDB\u884C\u4E2D" && task.priority === "\u9AD8") return true;
+      return false;
+    }
     const filteredTasks = sortTasks(
       data.tasks.filter((task) => {
         if (filterCat !== "\u5168\u90E8" && task.category !== filterCat) return false;
@@ -22184,11 +22252,12 @@
         );
       })
     );
-    const groupedTasks = filteredTasks.reduce((accumulator, task) => {
-      if (!accumulator[task.category]) accumulator[task.category] = [];
-      accumulator[task.category].push(task);
-      return accumulator;
-    }, {});
+    const desktopSections = data.categories.map((category) => {
+      const tasks = filteredTasks.filter((task) => task.category === category);
+      const activeTasks = tasks.filter(isActiveTask);
+      const silentTasks = tasks.filter((task) => !isActiveTask(task));
+      return { category, activeTasks, silentTasks, total: tasks.length };
+    }).filter((section) => section.total > 0);
     const mobileTasks = sortTasks(
       data.tasks.filter((task) => {
         if (filterCat !== "\u5168\u90E8" && task.category !== filterCat) return false;
@@ -22200,7 +22269,87 @@
       setConfirmState({ title, message, confirmLabel, confirmTone, onConfirm });
     }
     function resetNewTask() {
-      setNewTask(createEmptyTask());
+      setNewTask(createEmptyTask(data.categories));
+    }
+    function toggleSilentCategory(category) {
+      setCollapsedCategories((current) => ({ ...current, [category]: current[category] !== false ? false : true }));
+    }
+    function moveCategory(category, direction) {
+      const currentIndex = data.categories.indexOf(category);
+      const nextIndex = currentIndex + direction;
+      if (currentIndex < 0 || nextIndex < 0 || nextIndex >= data.categories.length) return;
+      backupAndApply("\u8C03\u6574\u5206\u7C7B\u987A\u5E8F\u524D\u81EA\u52A8\u5907\u4EFD", (current) => {
+        const nextCategories = [...current.categories];
+        const [item] = nextCategories.splice(currentIndex, 1);
+        nextCategories.splice(nextIndex, 0, item);
+        return { ...current, categories: nextCategories };
+      });
+      pushToast("\u5206\u7C7B\u987A\u5E8F\u5DF2\u66F4\u65B0");
+    }
+    function addCategory() {
+      const input = window.prompt("\u8F93\u5165\u65B0\u5206\u7C7B\u540D\u79F0");
+      const nextCategory = input?.trim();
+      if (!nextCategory) return;
+      if (data.categories.includes(nextCategory)) {
+        pushToast("\u5206\u7C7B\u5DF2\u5B58\u5728", "warning");
+        return;
+      }
+      backupAndApply("\u65B0\u589E\u5206\u7C7B\u524D\u81EA\u52A8\u5907\u4EFD", (current) => ({
+        ...current,
+        categories: [...current.categories, nextCategory]
+      }));
+      pushToast("\u5206\u7C7B\u5DF2\u65B0\u589E");
+    }
+    function renameCategory(category) {
+      const input = window.prompt("\u8F93\u5165\u65B0\u7684\u5206\u7C7B\u540D\u79F0", category);
+      const nextCategory = input?.trim();
+      if (!nextCategory || nextCategory === category) return;
+      if (data.categories.includes(nextCategory)) {
+        pushToast("\u5206\u7C7B\u540D\u79F0\u5DF2\u5B58\u5728", "warning");
+        return;
+      }
+      backupAndApply("\u91CD\u547D\u540D\u5206\u7C7B\u524D\u81EA\u52A8\u5907\u4EFD", (current) => ({
+        ...current,
+        categories: current.categories.map((item) => item === category ? nextCategory : item),
+        tasks: current.tasks.map((task) => task.category === category ? { ...task, category: nextCategory } : task),
+        archivedTasks: current.archivedTasks.map((task) => task.category === category ? { ...task, category: nextCategory } : task)
+      }));
+      setCollapsedCategories((current) => {
+        if (!(category in current)) return current;
+        return { ...current, [nextCategory]: current[category] };
+      });
+      pushToast("\u5206\u7C7B\u5DF2\u91CD\u547D\u540D");
+    }
+    function removeCategory(category) {
+      if (data.categories.length <= 1) {
+        pushToast("\u81F3\u5C11\u4FDD\u7559\u4E00\u4E2A\u5206\u7C7B", "warning");
+        return;
+      }
+      const remainingCategories = data.categories.filter((item) => item !== category);
+      const target = window.prompt(`\u5220\u9664\u540E\u8981\u8FC1\u79FB\u5230\u54EA\u4E2A\u5206\u7C7B\uFF1F
+\u53EF\u9009\uFF1A${remainingCategories.join("\u3001")}`, remainingCategories[0]);
+      const targetCategory = target?.trim();
+      if (!targetCategory) return;
+      if (!remainingCategories.includes(targetCategory)) {
+        pushToast("\u8FC1\u79FB\u76EE\u6807\u65E0\u6548", "warning");
+        return;
+      }
+      backupAndApply("\u5220\u9664\u5206\u7C7B\u524D\u81EA\u52A8\u5907\u4EFD", (current) => ({
+        ...current,
+        categories: current.categories.filter((item) => item !== category),
+        tasks: current.tasks.map((task) => task.category === category ? { ...task, category: targetCategory } : task),
+        archivedTasks: current.archivedTasks.map((task) => task.category === category ? { ...task, category: targetCategory } : task)
+      }));
+      setCollapsedCategories((current) => {
+        if (!(category in current)) return current;
+        const next = { ...current };
+        delete next[category];
+        return next;
+      });
+      if (filterCat === category) {
+        setFilterCat("\u5168\u90E8");
+      }
+      pushToast("\u5206\u7C7B\u5DF2\u5220\u9664\u5E76\u8FC1\u79FB\u4EFB\u52A1", "warning");
     }
     function handleAddTask() {
       if (!newTask.name.trim()) {
@@ -22422,6 +22571,7 @@
       MobileView,
       {
         data: mobileTasks,
+        categories: data.categories,
         mobileDay,
         setMobileDay,
         searchQuery,
@@ -22434,7 +22584,7 @@
         onEditCell: setEditCell,
         setCellItems
       }
-    ) : /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "filter-bar" }, ["\u5168\u90E8", ...CATEGORIES].map((category) => /* @__PURE__ */ import_react2.default.createElement(
+    ) : /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "filter-bar" }, ["\u5168\u90E8", ...data.categories].map((category) => /* @__PURE__ */ import_react2.default.createElement(
       "button",
       {
         key: category,
@@ -22443,7 +22593,7 @@
         onClick: () => setFilterCat(category)
       },
       category
-    )), /* @__PURE__ */ import_react2.default.createElement("div", { style: { marginLeft: "auto", flexShrink: 0 } }, /* @__PURE__ */ import_react2.default.createElement("input", { className: "search-input", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "\u{1F50D} \u641C\u7D22\u4EFB\u52A1\u2026" }))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "main-area" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-header-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "corner-cell" }, "\u4E8B\u9879 (", filteredTasks.length, ")"), days.map((date) => /* @__PURE__ */ import_react2.default.createElement("div", { key: date.toISOString(), ref: isToday(date) ? todayColRef : null, className: `day-cell ${isToday(date) ? "today" : ""}` }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-label" }, dayLabel(date)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-num" }, date.getDate())))), Object.entries(groupedTasks).map(([category, tasks]) => /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, { key: category }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "grid-container" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "cat-header", style: { background: `${catColor(category)}12`, borderLeft: `3px solid ${catColor(category)}`, color: catColor(category) } }, category, "\uFF08", tasks.length, "\uFF09")), tasks.map((task) => /* @__PURE__ */ import_react2.default.createElement("div", { key: task.id, className: "task-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-info", style: { borderLeftColor: catColor(task.category) }, onClick: () => setEditTask({ ...task }) }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-name" }, task.name), /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-meta" }, /* @__PURE__ */ import_react2.default.createElement(PBadge, { priority: task.priority, small: true }), /* @__PURE__ */ import_react2.default.createElement(SBadge, { status: task.status, small: true }), formatDeadline(task) ? /* @__PURE__ */ import_react2.default.createElement("span", { className: "badge-deadline" }, "\u622A\u6B62:", formatDeadline(task)) : null), task.responsible ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-people" }, task.responsible, task.participants ? ` \xB7 ${task.participants}` : "") : null), days.map((date) => {
+    )), /* @__PURE__ */ import_react2.default.createElement("div", { className: "desktop-visibility-switch" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: `filter-btn ${desktopVisibility === "active" ? "active" : ""}`, onClick: () => setDesktopVisibility("active") }, "\u4EC5\u6D3B\u8DC3"), /* @__PURE__ */ import_react2.default.createElement("button", { className: `filter-btn ${desktopVisibility === "all" ? "active" : ""}`, onClick: () => setDesktopVisibility("all") }, "\u542B\u9759\u9ED8")), /* @__PURE__ */ import_react2.default.createElement("div", { style: { marginLeft: "auto", flexShrink: 0 } }, /* @__PURE__ */ import_react2.default.createElement("input", { className: "search-input", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "\u{1F50D} \u641C\u7D22\u4EFB\u52A1\u2026" }))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "main-area" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-header-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "corner-cell" }, "\u4E8B\u9879 (", filteredTasks.length, ")"), days.map((date) => /* @__PURE__ */ import_react2.default.createElement("div", { key: date.toISOString(), ref: isToday(date) ? todayColRef : null, className: `day-cell ${isToday(date) ? "today" : ""}` }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-label" }, dayLabel(date)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-num" }, date.getDate())))), desktopSections.map(({ category, activeTasks, silentTasks, total }) => /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, { key: category }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "grid-container" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "cat-header", style: { background: `${catColor(category)}12`, borderLeft: `3px solid ${catColor(category)}`, color: catColor(category) } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "cat-header-row" }, /* @__PURE__ */ import_react2.default.createElement("span", null, category, "\uFF08", total, "\uFF09"), silentTasks.length ? /* @__PURE__ */ import_react2.default.createElement("button", { className: "cat-toggle-btn", onClick: () => toggleSilentCategory(category) }, collapsedCategories[category] !== false ? `\u5C55\u5F00\u9759\u9ED8\u4EFB\u52A1\uFF08${silentTasks.length}\uFF09` : `\u6536\u8D77\u9759\u9ED8\u4EFB\u52A1\uFF08${silentTasks.length}\uFF09`) : null))), activeTasks.map((task) => /* @__PURE__ */ import_react2.default.createElement("div", { key: task.id, className: "task-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-info", style: { borderLeftColor: catColor(task.category) }, onClick: () => setEditTask({ ...task }) }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-name" }, task.name), /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-meta" }, /* @__PURE__ */ import_react2.default.createElement(PBadge, { priority: task.priority, small: true }), /* @__PURE__ */ import_react2.default.createElement(SBadge, { status: task.status, small: true }), formatDeadline(task) ? /* @__PURE__ */ import_react2.default.createElement("span", { className: "badge-deadline" }, "\u622A\u6B62:", formatDeadline(task)) : null), task.responsible ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-people" }, task.responsible, task.participants ? ` \xB7 ${task.participants}` : "") : null), days.map((date) => {
       const day = dateKey(date);
       const items = getCellItems(task, day);
       const expandedKey = `${task.id}-${day}`;
@@ -22497,7 +22647,11 @@
           "\u7F16\u8F91"
         ), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn", style: { fontSize: 11, padding: "3px 10px", background: "#f0f0f0", color: "#999", border: "none" }, onClick: () => setExpandedCell(null) }, "\u6536\u8D77")))) : /* @__PURE__ */ import_react2.default.createElement("div", { className: "daily-cell-empty" }, "+")
       );
-    }))))), filteredTasks.length === 0 ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "empty-grid-state" }, "\u6682\u65E0\u5339\u914D\u4EFB\u52A1\uFF0C\u70B9\u51FB\u53F3\u4E0A\u89D2\u201C+ \u65B0\u4EFB\u52A1\u201D\u6DFB\u52A0") : null)), isMobile ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "mobile-bottom-bar" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn", onClick: () => setMobileDay(dateKey(/* @__PURE__ */ new Date())) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\u25C9"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u4ECA\u5929")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn", onClick: () => setShowArchive(true) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\u2713"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u5F52\u6863")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn mobile-bottom-btn-primary", onClick: () => setShowAdd(true) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\uFF0B"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u65B0\u4EFB\u52A1")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn", onClick: () => setShowSettings(true) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\u2699"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u8BBE\u7F6E"))) : null, /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showAdd, onClose: () => setShowAdd(false), title: "\u6DFB\u52A0\u65B0\u4EFB\u52A1" }, /* @__PURE__ */ import_react2.default.createElement(TaskForm, { task: newTask, setTask: setNewTask }), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark btn-block", onClick: handleAddTask }, "\u6DFB\u52A0")), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: Boolean(editTask), onClose: () => setEditTask(null), title: "\u7F16\u8F91\u4EFB\u52A1" }, editTask ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement(TaskForm, { task: editTask, setTask: setEditTask }), /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", gap: 10, marginTop: 10 } }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", style: { flex: 1, padding: 11, borderRadius: 10, fontSize: 14 }, onClick: handleSaveTaskEdit }, "\u4FDD\u5B58"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-success", style: { padding: "11px 16px", borderRadius: 10, fontSize: 14 }, onClick: () => dispatch({ type: "archiveTask", id: editTask.id }) }, "\u5B8C\u7ED3\u5F52\u6863"), /* @__PURE__ */ import_react2.default.createElement(
+    }))), (desktopVisibility === "all" || query) && (query || collapsedCategories[category] === false) ? silentTasks.map((task) => /* @__PURE__ */ import_react2.default.createElement("div", { key: task.id, className: "task-row task-row-muted" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-info task-info-muted", style: { borderLeftColor: catColor(task.category) }, onClick: () => setEditTask({ ...task }) }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-name" }, task.name), /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-meta" }, /* @__PURE__ */ import_react2.default.createElement(PBadge, { priority: task.priority, small: true }), /* @__PURE__ */ import_react2.default.createElement(SBadge, { status: task.status, small: true }), formatDeadline(task) ? /* @__PURE__ */ import_react2.default.createElement("span", { className: "badge-deadline" }, "\u622A\u6B62:", formatDeadline(task)) : null), task.responsible ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-people" }, task.responsible, task.participants ? ` \xB7 ${task.participants}` : "") : null), days.map((date) => {
+      const day = dateKey(date);
+      const items = getCellItems(task, day);
+      return /* @__PURE__ */ import_react2.default.createElement("div", { key: `${task.id}-${day}`, className: `daily-cell ${isToday(date) ? "today" : ""}` }, items ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3 } }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${task.id}-${day}-silent-${index}` }, renderCompactPlanItem(item, () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }))))) : /* @__PURE__ */ import_react2.default.createElement("div", { className: "daily-cell-empty daily-cell-empty-muted" }, "\xB7"));
+    }))) : null)), filteredTasks.length === 0 ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "empty-grid-state" }, "\u6682\u65E0\u5339\u914D\u4EFB\u52A1\uFF0C\u70B9\u51FB\u53F3\u4E0A\u89D2\u201C+ \u65B0\u4EFB\u52A1\u201D\u6DFB\u52A0") : null)), isMobile ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "mobile-bottom-bar" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn", onClick: () => setMobileDay(dateKey(/* @__PURE__ */ new Date())) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\u25C9"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u4ECA\u5929")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn", onClick: () => setShowArchive(true) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\u2713"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u5F52\u6863")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn mobile-bottom-btn-primary", onClick: () => setShowAdd(true) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\uFF0B"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u65B0\u4EFB\u52A1")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn", onClick: () => setShowSettings(true) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\u2699"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u8BBE\u7F6E"))) : null, /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showAdd, onClose: () => setShowAdd(false), title: "\u6DFB\u52A0\u65B0\u4EFB\u52A1" }, /* @__PURE__ */ import_react2.default.createElement(TaskForm, { task: newTask, setTask: setNewTask, categories: data.categories }), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark btn-block", onClick: handleAddTask }, "\u6DFB\u52A0")), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: Boolean(editTask), onClose: () => setEditTask(null), title: "\u7F16\u8F91\u4EFB\u52A1" }, editTask ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement(TaskForm, { task: editTask, setTask: setEditTask, categories: data.categories }), /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", gap: 10, marginTop: 10 } }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", style: { flex: 1, padding: 11, borderRadius: 10, fontSize: 14 }, onClick: handleSaveTaskEdit }, "\u4FDD\u5B58"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-success", style: { padding: "11px 16px", borderRadius: 10, fontSize: 14 }, onClick: () => dispatch({ type: "archiveTask", id: editTask.id }) }, "\u5B8C\u7ED3\u5F52\u6863"), /* @__PURE__ */ import_react2.default.createElement(
       "button",
       {
         className: "btn btn-danger",
@@ -22568,7 +22722,7 @@
         })
       },
       "\u5220\u9664"
-    )))))), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showSettings, onClose: () => setShowSettings(false), title: "\u8BBE\u7F6E", width: 420 }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section", style: { marginTop: 0, paddingTop: 0, borderTop: "none" } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u2601\uFE0F \u670D\u52A1\u7AEF\u540C\u6B65"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u65B9\u5F0F\uFF1A"), "Alibaba Cloud API + MySQL"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F53\u524D\u5DE5\u4F5C\u7A7A\u95F4\uFF1A"), gistId), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u72B6\u6001\uFF1A"), syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u8FDE\u63A5\u5931\u8D25" : "\u540C\u6B65\u4E2D")), /* @__PURE__ */ import_react2.default.createElement("p", { className: "settings-note", style: { marginTop: 10 } }, "\u5F53\u524D\u7248\u672C\u4EE5\u670D\u52A1\u7AEF\u6570\u636E\u5E93\u4F5C\u4E3A\u552F\u4E00\u771F\u5B9E\u6570\u636E\u6E90\u3002\u672C\u5730 localStorage \u7EE7\u7EED\u4FDD\u7559\u7528\u4E8E\u7F13\u5B58\u548C\u5907\u4EFD\uFF0C\u4E0D\u518D\u4F7F\u7528 GitHub Gist \u4F5C\u4E3A\u4E3B\u540C\u6B65\u65B9\u5F0F\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: pullFromCloud }, "\u2193 \u4ECE\u670D\u52A1\u7AEF\u5237\u65B0"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u6570\u636E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-primary", onClick: exportData }, "\u{1F4E4} \u5BFC\u51FA"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => fileRef.current?.click() }, "\u{1F4E5} \u5BFC\u5165"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: resetDataWithBackup }, "\u{1F5D1} \u91CD\u7F6E"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u5907\u4EFD"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, backupInfo ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u6700\u8FD1\u5907\u4EFD\uFF1A"), new Date(backupInfo.savedAt).toLocaleString()), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u539F\u56E0\uFF1A"), backupInfo.reason)) : /* @__PURE__ */ import_react2.default.createElement("div", null, "\u5F53\u524D\u6CA1\u6709\u672C\u5730\u5907\u4EFD\u3002")), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: restoreBackup }, "\u6062\u590D\u6700\u8FD1\u5907\u4EFD"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u4F7F\u7528\u8BF4\u660E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "settings-note" }, /* @__PURE__ */ import_react2.default.createElement("p", null, "1. \u6570\u636E\u4F1A\u4F18\u5148\u5199\u5165\u670D\u52A1\u7AEF\uFF0C\u518D\u540C\u6B65\u5230\u5176\u4ED6\u8BBE\u5907\uFF0C\u8DE8\u7AEF\u4E00\u81F4\u6027\u4F1A\u6BD4 Gist \u65B9\u6848\u7A33\u5B9A\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "2. \u5982\u679C\u5176\u4ED6\u8BBE\u5907\u5DF2\u7ECF\u5199\u5165\u4E86\u65B0\u7248\u672C\uFF0C\u9876\u90E8\u4ECD\u4F1A\u63D0\u793A\u4F60\u51B3\u5B9A\u4FDD\u7559\u672C\u5730\u8FD8\u662F\u91C7\u7528\u670D\u52A1\u7AEF\u7248\u672C\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "3. \u5BFC\u5165\u3001\u91CD\u7F6E\u3001\u8986\u76D6\u670D\u52A1\u7AEF\u7248\u672C\u4E4B\u524D\uFF0C\u7CFB\u7EDF\u4ECD\u4F1A\u81EA\u52A8\u4FDD\u7559\u4E00\u4EFD\u672C\u5730\u5907\u4EFD\u3002")))), /* @__PURE__ */ import_react2.default.createElement(
+    )))))), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showSettings, onClose: () => setShowSettings(false), title: "\u8BBE\u7F6E", width: 420 }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section", style: { marginTop: 0, paddingTop: 0, borderTop: "none" } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u2601\uFE0F \u670D\u52A1\u7AEF\u540C\u6B65"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u65B9\u5F0F\uFF1A"), "Alibaba Cloud API + MySQL"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F53\u524D\u5DE5\u4F5C\u7A7A\u95F4\uFF1A"), gistId), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u72B6\u6001\uFF1A"), syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u8FDE\u63A5\u5931\u8D25" : "\u540C\u6B65\u4E2D")), /* @__PURE__ */ import_react2.default.createElement("p", { className: "settings-note", style: { marginTop: 10 } }, "\u5F53\u524D\u7248\u672C\u4EE5\u670D\u52A1\u7AEF\u6570\u636E\u5E93\u4F5C\u4E3A\u552F\u4E00\u771F\u5B9E\u6570\u636E\u6E90\u3002\u672C\u5730 localStorage \u7EE7\u7EED\u4FDD\u7559\u7528\u4E8E\u7F13\u5B58\u548C\u5907\u4EFD\uFF0C\u4E0D\u518D\u4F7F\u7528 GitHub Gist \u4F5C\u4E3A\u4E3B\u540C\u6B65\u65B9\u5F0F\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: pullFromCloud }, "\u2193 \u4ECE\u670D\u52A1\u7AEF\u5237\u65B0"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u6570\u636E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-primary", onClick: exportData }, "\u{1F4E4} \u5BFC\u51FA"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => fileRef.current?.click() }, "\u{1F4E5} \u5BFC\u5165"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: resetDataWithBackup }, "\u{1F5D1} \u91CD\u7F6E"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u5907\u4EFD"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, backupInfo ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u6700\u8FD1\u5907\u4EFD\uFF1A"), new Date(backupInfo.savedAt).toLocaleString()), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u539F\u56E0\uFF1A"), backupInfo.reason)) : /* @__PURE__ */ import_react2.default.createElement("div", null, "\u5F53\u524D\u6CA1\u6709\u672C\u5730\u5907\u4EFD\u3002")), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: restoreBackup }, "\u6062\u590D\u6700\u8FD1\u5907\u4EFD"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u5206\u7C7B\u7BA1\u7406"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "settings-note" }, "\u5206\u7C7B\u987A\u5E8F\u4F1A\u540C\u6B65\u5230\u9876\u90E8\u6807\u7B7E\u680F\u548C\u65B0\u589E\u4EFB\u52A1\u8868\u5355\u3002\u5220\u9664\u5206\u7C7B\u65F6\uFF0C\u7CFB\u7EDF\u4F1A\u5148\u8981\u6C42\u4F60\u628A\u73B0\u6709\u4EFB\u52A1\u8FC1\u79FB\u5230\u5176\u4ED6\u5206\u7C7B\uFF0C\u4E0D\u4F1A\u76F4\u63A5\u4E22\u5931\u4EFB\u52A1\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-list" }, data.categories.map((category, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: category, className: "category-admin-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-name" }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "category-admin-dot", style: { background: catColor(category) } }), /* @__PURE__ */ import_react2.default.createElement("span", null, category)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => moveCategory(category, -1), disabled: index === 0 }, "\u4E0A\u79FB"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => moveCategory(category, 1), disabled: index === data.categories.length - 1 }, "\u4E0B\u79FB"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => renameCategory(category) }, "\u91CD\u547D\u540D"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: () => removeCategory(category) }, "\u5220\u9664"))))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", onClick: addCategory }, "\u65B0\u589E\u5206\u7C7B"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u4F7F\u7528\u8BF4\u660E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "settings-note" }, /* @__PURE__ */ import_react2.default.createElement("p", null, "1. \u6570\u636E\u4F1A\u4F18\u5148\u5199\u5165\u670D\u52A1\u7AEF\uFF0C\u518D\u540C\u6B65\u5230\u5176\u4ED6\u8BBE\u5907\uFF0C\u8DE8\u7AEF\u4E00\u81F4\u6027\u4F1A\u6BD4 Gist \u65B9\u6848\u7A33\u5B9A\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "2. \u5982\u679C\u5176\u4ED6\u8BBE\u5907\u5DF2\u7ECF\u5199\u5165\u4E86\u65B0\u7248\u672C\uFF0C\u9876\u90E8\u4ECD\u4F1A\u63D0\u793A\u4F60\u51B3\u5B9A\u4FDD\u7559\u672C\u5730\u8FD8\u662F\u91C7\u7528\u670D\u52A1\u7AEF\u7248\u672C\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "3. \u5BFC\u5165\u3001\u91CD\u7F6E\u3001\u8986\u76D6\u670D\u52A1\u7AEF\u7248\u672C\u4E4B\u524D\uFF0C\u7CFB\u7EDF\u4ECD\u4F1A\u81EA\u52A8\u4FDD\u7559\u4E00\u4EFD\u672C\u5730\u5907\u4EFD\u3002")))), /* @__PURE__ */ import_react2.default.createElement(
       ConfirmDialog,
       {
         open: Boolean(confirmState),

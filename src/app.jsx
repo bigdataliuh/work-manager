@@ -1,7 +1,6 @@
 import React, { useEffect, useReducer, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
-  CATEGORIES,
   createEmptyTask,
   dateKey,
   dayLabel,
@@ -42,13 +41,13 @@ function dataReducer(state, action) {
     case "addTask":
       return updateTimestamp({
         ...state,
-        tasks: [...state.tasks, normalizeData({ tasks: [{ ...action.task, id: genId(), dailyActions: {} }], archivedTasks: [] }).tasks[0]]
+        tasks: [...state.tasks, normalizeData({ categories: state.categories, tasks: [{ ...action.task, id: genId(), dailyActions: {} }], archivedTasks: [] }).tasks[0]]
       });
 
     case "updateTask":
       return updateTimestamp({
         ...state,
-        tasks: state.tasks.map((task) => (task.id === action.task.id ? normalizeData({ tasks: [{ ...task, ...action.task }], archivedTasks: [] }).tasks[0] : task))
+        tasks: state.tasks.map((task) => (task.id === action.task.id ? normalizeData({ categories: state.categories, tasks: [{ ...task, ...action.task }], archivedTasks: [] }).tasks[0] : task))
       });
 
     case "archiveTask": {
@@ -122,6 +121,7 @@ function App() {
   const [data, dispatch] = useReducer(dataReducer, undefined, loadData);
   const [weekOffset, setWeekOffset] = useState(0);
   const [filterCat, setFilterCat] = useState("全部");
+  const [desktopVisibility, setDesktopVisibility] = useState("active");
   const [showAdd, setShowAdd] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -129,7 +129,7 @@ function App() {
   const [editCell, setEditCell] = useState(null);
   const [cellItems, setCellItems] = useState([{ title: "", content: "", done: false }]);
   const [expandedCell, setExpandedCell] = useState(null);
-  const [newTask, setNewTask] = useState(createEmptyTask);
+  const [newTask, setNewTask] = useState(() => createEmptyTask());
   const [gistToken, setGistToken] = useState(() => getSessionToken());
   const [gistId, setGistId] = useState(() => getSavedGistId());
   const [syncStatus, setSyncStatus] = useState("idle");
@@ -142,6 +142,7 @@ function App() {
   const [confirmState, setConfirmState] = useState(null);
   const [backupInfo, setBackupInfo] = useState(() => loadBackup());
   const [hasInitializedRemote, setHasInitializedRemote] = useState(false);
+  const [collapsedCategories, setCollapsedCategories] = useState({});
   const fileRef = useRef(null);
   const syncTimerRef = useRef(null);
   const todayColRef = useRef(null);
@@ -153,6 +154,16 @@ function App() {
 
   function pushToast(message, type = "success") {
     setToasts((current) => [...current, createToast(message, type)]);
+  }
+
+  function applyStateUpdate(updater) {
+    dispatch({ type: "replace", data: updater(data) });
+  }
+
+  function backupAndApply(reason, updater) {
+    saveBackup(data, reason);
+    setBackupInfo(loadBackup());
+    applyStateUpdate(updater);
   }
 
   useEffect(() => {
@@ -173,6 +184,18 @@ function App() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    if (filterCat !== "全部" && !data.categories.includes(filterCat)) {
+      setFilterCat("全部");
+    }
+  }, [data.categories, filterCat]);
+
+  useEffect(() => {
+    if (!data.categories.length) return;
+    setNewTask((current) => (data.categories.includes(current.category) ? current : { ...current, category: data.categories[0] }));
+    setEditTask((current) => (current && !data.categories.includes(current.category) ? { ...current, category: data.categories[0] } : current));
+  }, [data.categories]);
 
   useEffect(() => {
     if (!gistToken || !gistId) return undefined;
@@ -265,6 +288,25 @@ function App() {
   });
 
   const query = searchQuery.trim().toLowerCase();
+  const weekStart = dateKey(days[0]);
+  const weekEnd = dateKey(days[6]);
+
+  function hasItemsThisWeek(task) {
+    return days.some((date) => Boolean(getCellItems(task, dateKey(date))));
+  }
+
+  function hasNearbyDeadline(task) {
+    if (task.deadlineMode !== "date" || !task.deadlineDate) return false;
+    return task.deadlineDate >= weekStart && task.deadlineDate <= weekEnd;
+  }
+
+  function isActiveTask(task) {
+    if (hasItemsThisWeek(task)) return true;
+    if (hasNearbyDeadline(task)) return true;
+    if (task.status === "进行中" && task.priority === "高") return true;
+    return false;
+  }
+
   const filteredTasks = sortTasks(
     data.tasks.filter((task) => {
       if (filterCat !== "全部" && task.category !== filterCat) return false;
@@ -282,11 +324,14 @@ function App() {
     })
   );
 
-  const groupedTasks = filteredTasks.reduce((accumulator, task) => {
-    if (!accumulator[task.category]) accumulator[task.category] = [];
-    accumulator[task.category].push(task);
-    return accumulator;
-  }, {});
+  const desktopSections = data.categories
+    .map((category) => {
+      const tasks = filteredTasks.filter((task) => task.category === category);
+      const activeTasks = tasks.filter(isActiveTask);
+      const silentTasks = tasks.filter((task) => !isActiveTask(task));
+      return { category, activeTasks, silentTasks, total: tasks.length };
+    })
+    .filter((section) => section.total > 0);
 
   const mobileTasks = sortTasks(
     data.tasks.filter((task) => {
@@ -306,7 +351,96 @@ function App() {
   }
 
   function resetNewTask() {
-    setNewTask(createEmptyTask());
+    setNewTask(createEmptyTask(data.categories));
+  }
+
+  function toggleSilentCategory(category) {
+    setCollapsedCategories((current) => ({ ...current, [category]: current[category] !== false ? false : true }));
+  }
+
+  function moveCategory(category, direction) {
+    const currentIndex = data.categories.indexOf(category);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= data.categories.length) return;
+
+    backupAndApply("调整分类顺序前自动备份", (current) => {
+      const nextCategories = [...current.categories];
+      const [item] = nextCategories.splice(currentIndex, 1);
+      nextCategories.splice(nextIndex, 0, item);
+      return { ...current, categories: nextCategories };
+    });
+    pushToast("分类顺序已更新");
+  }
+
+  function addCategory() {
+    const input = window.prompt("输入新分类名称");
+    const nextCategory = input?.trim();
+    if (!nextCategory) return;
+    if (data.categories.includes(nextCategory)) {
+      pushToast("分类已存在", "warning");
+      return;
+    }
+
+    backupAndApply("新增分类前自动备份", (current) => ({
+      ...current,
+      categories: [...current.categories, nextCategory]
+    }));
+    pushToast("分类已新增");
+  }
+
+  function renameCategory(category) {
+    const input = window.prompt("输入新的分类名称", category);
+    const nextCategory = input?.trim();
+    if (!nextCategory || nextCategory === category) return;
+    if (data.categories.includes(nextCategory)) {
+      pushToast("分类名称已存在", "warning");
+      return;
+    }
+
+    backupAndApply("重命名分类前自动备份", (current) => ({
+      ...current,
+      categories: current.categories.map((item) => (item === category ? nextCategory : item)),
+      tasks: current.tasks.map((task) => (task.category === category ? { ...task, category: nextCategory } : task)),
+      archivedTasks: current.archivedTasks.map((task) => (task.category === category ? { ...task, category: nextCategory } : task))
+    }));
+    setCollapsedCategories((current) => {
+      if (!(category in current)) return current;
+      return { ...current, [nextCategory]: current[category] };
+    });
+    pushToast("分类已重命名");
+  }
+
+  function removeCategory(category) {
+    if (data.categories.length <= 1) {
+      pushToast("至少保留一个分类", "warning");
+      return;
+    }
+
+    const remainingCategories = data.categories.filter((item) => item !== category);
+    const target = window.prompt(`删除后要迁移到哪个分类？\n可选：${remainingCategories.join("、")}`, remainingCategories[0]);
+    const targetCategory = target?.trim();
+    if (!targetCategory) return;
+    if (!remainingCategories.includes(targetCategory)) {
+      pushToast("迁移目标无效", "warning");
+      return;
+    }
+
+    backupAndApply("删除分类前自动备份", (current) => ({
+      ...current,
+      categories: current.categories.filter((item) => item !== category),
+      tasks: current.tasks.map((task) => (task.category === category ? { ...task, category: targetCategory } : task)),
+      archivedTasks: current.archivedTasks.map((task) => (task.category === category ? { ...task, category: targetCategory } : task))
+    }));
+    setCollapsedCategories((current) => {
+      if (!(category in current)) return current;
+      const next = { ...current };
+      delete next[category];
+      return next;
+    });
+    if (filterCat === category) {
+      setFilterCat("全部");
+    }
+    pushToast("分类已删除并迁移任务", "warning");
   }
 
   function handleAddTask() {
@@ -600,6 +734,7 @@ function App() {
       {isMobile ? (
         <MobileView
           data={mobileTasks}
+          categories={data.categories}
           mobileDay={mobileDay}
           setMobileDay={setMobileDay}
           searchQuery={searchQuery}
@@ -615,7 +750,7 @@ function App() {
       ) : (
         <>
           <div className="filter-bar">
-            {["全部", ...CATEGORIES].map((category) => (
+            {["全部", ...data.categories].map((category) => (
               <button
                 key={category}
                 className={`filter-btn ${filterCat === category ? "active" : ""}`}
@@ -625,6 +760,14 @@ function App() {
                 {category}
               </button>
             ))}
+            <div className="desktop-visibility-switch">
+              <button className={`filter-btn ${desktopVisibility === "active" ? "active" : ""}`} onClick={() => setDesktopVisibility("active")}>
+                仅活跃
+              </button>
+              <button className={`filter-btn ${desktopVisibility === "all" ? "active" : ""}`} onClick={() => setDesktopVisibility("all")}>
+                含静默
+              </button>
+            </div>
             <div style={{ marginLeft: "auto", flexShrink: 0 }}>
               <input className="search-input" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="🔍 搜索任务…" />
             </div>
@@ -641,14 +784,21 @@ function App() {
               ))}
             </div>
 
-            {Object.entries(groupedTasks).map(([category, tasks]) => (
+            {desktopSections.map(({ category, activeTasks, silentTasks, total }) => (
               <React.Fragment key={category}>
                 <div className="grid-container">
                   <div className="cat-header" style={{ background: `${catColor(category)}12`, borderLeft: `3px solid ${catColor(category)}`, color: catColor(category) }}>
-                    {category}（{tasks.length}）
+                    <div className="cat-header-row">
+                      <span>{category}（{total}）</span>
+                      {silentTasks.length ? (
+                        <button className="cat-toggle-btn" onClick={() => toggleSilentCategory(category)}>
+                          {collapsedCategories[category] !== false ? `展开静默任务（${silentTasks.length}）` : `收起静默任务（${silentTasks.length}）`}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
-                {tasks.map((task) => (
+                {activeTasks.map((task) => (
                   <div key={task.id} className="task-row">
                     <div className="task-info" style={{ borderLeftColor: catColor(task.category) }} onClick={() => setEditTask({ ...task })}>
                       <div className="task-name">{task.name}</div>
@@ -744,6 +894,40 @@ function App() {
                     })}
                   </div>
                 ))}
+                {(desktopVisibility === "all" || query) && (query || collapsedCategories[category] === false) ? (
+                  silentTasks.map((task) => (
+                    <div key={task.id} className="task-row task-row-muted">
+                      <div className="task-info task-info-muted" style={{ borderLeftColor: catColor(task.category) }} onClick={() => setEditTask({ ...task })}>
+                        <div className="task-name">{task.name}</div>
+                        <div className="task-meta">
+                          <PBadge priority={task.priority} small />
+                          <SBadge status={task.status} small />
+                          {formatDeadline(task) ? <span className="badge-deadline">截止:{formatDeadline(task)}</span> : null}
+                        </div>
+                        {task.responsible ? <div className="task-people">{task.responsible}{task.participants ? ` · ${task.participants}` : ""}</div> : null}
+                      </div>
+                      {days.map((date) => {
+                        const day = dateKey(date);
+                        const items = getCellItems(task, day);
+                        return (
+                          <div key={`${task.id}-${day}`} className={`daily-cell ${isToday(date) ? "today" : ""}`}>
+                            {items ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                {items.map((item, index) => (
+                                  <div key={`${task.id}-${day}-silent-${index}`}>
+                                    {renderCompactPlanItem(item, () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }))}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="daily-cell-empty daily-cell-empty-muted">·</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))
+                ) : null}
               </React.Fragment>
             ))}
 
@@ -774,14 +958,14 @@ function App() {
       ) : null}
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="添加新任务">
-        <TaskForm task={newTask} setTask={setNewTask} />
+        <TaskForm task={newTask} setTask={setNewTask} categories={data.categories} />
         <button className="btn btn-dark btn-block" onClick={handleAddTask}>添加</button>
       </Modal>
 
       <Modal open={Boolean(editTask)} onClose={() => setEditTask(null)} title="编辑任务">
         {editTask ? (
           <>
-            <TaskForm task={editTask} setTask={setEditTask} />
+            <TaskForm task={editTask} setTask={setEditTask} categories={data.categories} />
             <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
               <button className="btn btn-dark" style={{ flex: 1, padding: 11, borderRadius: 10, fontSize: 14 }} onClick={handleSaveTaskEdit}>保存</button>
               <button className="btn btn-success" style={{ padding: "11px 16px", borderRadius: 10, fontSize: 14 }} onClick={() => dispatch({ type: "archiveTask", id: editTask.id })}>完结归档</button>
@@ -936,6 +1120,30 @@ function App() {
           </div>
           <div className="inline-actions">
             <button className="btn btn-outline" onClick={restoreBackup}>恢复最近备份</button>
+          </div>
+        </div>
+
+        <div className="data-section">
+          <div className="data-section-title">分类管理</div>
+          <div className="settings-note">分类顺序会同步到顶部标签栏和新增任务表单。删除分类时，系统会先要求你把现有任务迁移到其他分类，不会直接丢失任务。</div>
+          <div className="category-admin-list">
+            {data.categories.map((category, index) => (
+              <div key={category} className="category-admin-row">
+                <div className="category-admin-name">
+                  <span className="category-admin-dot" style={{ background: catColor(category) }} />
+                  <span>{category}</span>
+                </div>
+                <div className="category-admin-actions">
+                  <button className="btn btn-outline" onClick={() => moveCategory(category, -1)} disabled={index === 0}>上移</button>
+                  <button className="btn btn-outline" onClick={() => moveCategory(category, 1)} disabled={index === data.categories.length - 1}>下移</button>
+                  <button className="btn btn-outline" onClick={() => renameCategory(category)}>重命名</button>
+                  <button className="btn btn-danger" onClick={() => removeCategory(category)}>删除</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="inline-actions">
+            <button className="btn btn-dark" onClick={addCategory}>新增分类</button>
           </div>
         </div>
 

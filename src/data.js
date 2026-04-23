@@ -1,17 +1,22 @@
 export const STORAGE_KEY = "work-mgr-v3";
 export const BACKUP_KEY = "work-mgr-local-backup";
 
-export const CATEGORIES = ["项目", "活动", "商务", "开发", "临时任务"];
+export const CATEGORIES = ["项目", "商务", "开发", "日常任务", "临时任务", "机器人"];
 export const STATUS_OPTIONS = ["进行中", "待启动", "已完成", "已搁置"];
 export const PRIORITY_OPTIONS = ["高", "中", "低"];
 export const DEADLINE_MODES = ["none", "date", "text"];
 
 export const CAT_COLORS = {
   项目: "#C05046",
-  活动: "#7030A0",
   商务: "#2E75B6",
   开发: "#548235",
-  临时任务: "#BF8F00"
+  日常任务: "#0F766E",
+  临时任务: "#BF8F00",
+  机器人: "#7030A0"
+};
+
+const LEGACY_CATEGORY_MAP = {
+  活动: "机器人"
 };
 
 const PRIORITY_RANK = { 高: 0, 中: 1, 低: 2 };
@@ -19,6 +24,34 @@ const STATUS_RANK = { 进行中: 0, 待启动: 1, 已搁置: 2, 已完成: 3 };
 
 export function catColor(category) {
   return CAT_COLORS[category] || "#64748b";
+}
+
+function normalizeCategoryName(category) {
+  if (typeof category !== "string") return "";
+  const trimmed = category.trim();
+  return LEGACY_CATEGORY_MAP[trimmed] || trimmed;
+}
+
+export function normalizeCategories(rawCategories, taskLists = []) {
+  const categories = [];
+  const seen = new Set();
+
+  function pushCategory(category) {
+    const normalized = normalizeCategoryName(category);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    categories.push(normalized);
+  }
+
+  if (Array.isArray(rawCategories) && rawCategories.length) {
+    rawCategories.forEach(pushCategory);
+  } else {
+    CATEGORIES.forEach(pushCategory);
+  }
+
+  taskLists.flat().forEach((task) => pushCategory(task?.category));
+
+  return categories.length ? categories : [...CATEGORIES];
 }
 
 export function genId() {
@@ -142,12 +175,13 @@ function normalizeDailyActions(dailyActions = {}) {
   return next;
 }
 
-export function normalizeTask(raw = {}) {
+export function normalizeTask(raw = {}, categories = CATEGORIES) {
   const deadlineFields = normalizeDeadlineFields(raw);
+  const normalizedCategory = normalizeCategoryName(raw.category);
   return {
     id: raw.id || genId(),
     name: typeof raw.name === "string" ? raw.name.trim() : "",
-    category: CATEGORIES.includes(raw.category) ? raw.category : CATEGORIES[0],
+    category: categories.includes(normalizedCategory) ? normalizedCategory : categories[0] || CATEGORIES[0],
     status: STATUS_OPTIONS.includes(raw.status) ? raw.status : STATUS_OPTIONS[0],
     priority: PRIORITY_OPTIONS.includes(raw.priority) ? raw.priority : PRIORITY_OPTIONS[0],
     responsible: typeof raw.responsible === "string" ? raw.responsible.trim() : "",
@@ -158,10 +192,10 @@ export function normalizeTask(raw = {}) {
   };
 }
 
-export function createEmptyTask() {
+export function createEmptyTask(categories = CATEGORIES) {
   return {
     name: "",
-    category: "项目",
+    category: categories[0] || CATEGORIES[0],
     priority: "高",
     responsible: "我",
     participants: "",
@@ -172,22 +206,11 @@ export function createEmptyTask() {
   };
 }
 
-function createSeedTasks() {
-  return [
-    { name: "朝天宫项目-语料编写", category: "项目", status: "进行中", priority: "高", responsible: "我", participants: "邵颖团队", deadlineMode: "text", deadlineText: "4/24", dailyActions: {} },
-    { name: "朝天宫项目-素材采集", category: "项目", status: "待启动", priority: "高", responsible: "于帆", participants: "rokid李源", deadlineMode: "text", deadlineText: "4/24", dailyActions: {} },
-    { name: "rokid合作模式谈判", category: "商务", status: "进行中", priority: "高", responsible: "我", participants: "冯", deadlineMode: "text", deadlineText: "本周五", dailyActions: {} },
-    { name: "工信商务消化", category: "商务", status: "进行中", priority: "高", responsible: "我", participants: "", deadlineMode: "text", deadlineText: "持续", dailyActions: {} },
-    { name: "三台机器人对接", category: "开发", status: "进行中", priority: "中", responsible: "我", participants: "南大", deadlineMode: "text", deadlineText: "持续", dailyActions: {} },
-    { name: "知识库维护", category: "开发", status: "进行中", priority: "中", responsible: "我", participants: "", deadlineMode: "text", deadlineText: "持续", dailyActions: {} },
-    { name: "书记盯办事项", category: "临时任务", status: "进行中", priority: "高", responsible: "我", participants: "", deadlineMode: "none", deadlineText: "", dailyActions: {} }
-  ].map((task) => normalizeTask(task));
-}
-
 export function defaultData() {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     _lastModified: 0,
+    categories: [...CATEGORIES],
     tasks: [],
     archivedTasks: []
   };
@@ -196,14 +219,18 @@ export function defaultData() {
 export function normalizeData(input) {
   if (!input || typeof input !== "object") return defaultData();
 
-  const tasks = Array.isArray(input.tasks) ? input.tasks.map(normalizeTask).filter((task) => task.name) : [];
-  const archivedTasks = Array.isArray(input.archivedTasks)
-    ? input.archivedTasks.map((task) => normalizeTask({ ...task, status: "已完成" })).filter((task) => task.name)
-    : [];
+  const rawTasks = Array.isArray(input.tasks) ? input.tasks : [];
+  const rawArchivedTasks = Array.isArray(input.archivedTasks) ? input.archivedTasks : [];
+  const categories = normalizeCategories(input.categories, [rawTasks, rawArchivedTasks]);
+  const tasks = rawTasks.map((task) => normalizeTask(task, categories)).filter((task) => task.name);
+  const archivedTasks = rawArchivedTasks
+    .map((task) => normalizeTask({ ...task, status: "已完成" }, categories))
+    .filter((task) => task.name);
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     _lastModified: typeof input._lastModified === "number" ? input._lastModified : Date.now(),
+    categories,
     tasks,
     archivedTasks
   };
