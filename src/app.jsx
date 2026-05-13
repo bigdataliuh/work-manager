@@ -24,6 +24,9 @@ import {
 import {
   clearSavedGistId,
   clearSessionToken,
+  completeMentionPlan,
+  completeMentionTask,
+  completeNotification,
   createAdminUser,
   deleteAdminUser,
   getSavedGistId,
@@ -411,6 +414,40 @@ function App() {
     }
   }
 
+  async function handleCompleteNotification(notification) {
+    try {
+      await completeNotification(notification.id);
+      await refreshNotifications();
+      pushToast("已通知相关成员任务完成");
+    } catch (error) {
+      console.error(error);
+      pushToast(error.message || "任务完成通知失败", "error");
+    }
+  }
+
+  async function handleCompleteMentionTask(task) {
+    try {
+      const completedCount = await completeMentionTask(workspaceUser?.id || currentUser?.id, task.id);
+      await refreshNotifications();
+      pushToast(completedCount ? "已通知相关成员任务完成" : "没有找到可更新的@通知", completedCount ? "success" : "warning");
+    } catch (error) {
+      console.error(error);
+      pushToast(error.message || "任务完成通知失败", "error");
+    }
+  }
+
+  async function handleCompleteMentionPlan(index) {
+    if (!editCell) return;
+    try {
+      const completedCount = await completeMentionPlan(workspaceUser?.id || currentUser?.id, editCell.taskId, editCell.day, index);
+      await refreshNotifications();
+      pushToast(completedCount ? "已通知相关成员任务完成" : "没有找到可更新的@通知", completedCount ? "success" : "warning");
+    } catch (error) {
+      console.error(error);
+      pushToast(error.message || "任务完成通知失败", "error");
+    }
+  }
+
   useEffect(() => {
     let active = true;
 
@@ -610,6 +647,10 @@ function App() {
     return notification.actorUser?.displayName || notification.actorUser?.username || "有人";
   }
 
+  function notificationCompletedByLabel(notification) {
+    return notification.completedByUser?.displayName || notification.completedByUser?.username || "有人";
+  }
+
   function notificationMeta(notification) {
     const workspaceName = notification.workspaceUser?.displayName || notification.workspaceUser?.username || "";
     const parts = [
@@ -618,6 +659,14 @@ function App() {
       workspaceName ? `${workspaceName} 的工作台` : ""
     ].filter(Boolean);
     return parts.join(" · ");
+  }
+
+  function taskHasMentions(task) {
+    return /(^|\s)@[^@\s]+/.test([task?.name, task?.responsible, task?.participants].filter(Boolean).join(" "));
+  }
+
+  function planHasMentions(item) {
+    return /(^|\s)@[^@\s]+/.test([item?.title, item?.content].filter(Boolean).join(" "));
   }
 
   function isActiveTask(task) {
@@ -1451,6 +1500,9 @@ function App() {
             <TaskForm task={editTask} setTask={setEditTask} categories={data.categories} mentionUsers={mentionUsers} />
             <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
               <button className="btn btn-dark" style={{ flex: 1, padding: 11, borderRadius: 10, fontSize: 14 }} onClick={handleSaveTaskEdit}>保存</button>
+              {taskHasMentions(editTask) ? (
+                <button className="btn btn-outline" style={{ padding: "11px 16px", borderRadius: 10, fontSize: 14 }} onClick={() => handleCompleteMentionTask(editTask)}>任务已完成</button>
+              ) : null}
               <button className="btn btn-success" style={{ padding: "11px 16px", borderRadius: 10, fontSize: 14 }} onClick={() => dispatch({ type: "archiveTask", id: editTask.id })}>完结归档</button>
               <button
                 className="btn btn-danger"
@@ -1505,6 +1557,11 @@ function App() {
                     onChange={(event) => setCellItems((current) => current.map((it, itemIndex) => (itemIndex === index ? { ...it, content: event.target.value } : it)))}
                   />
                   <MentionPicker users={mentionUsers} onMention={(user) => appendMentionToPlan(index, user)} />
+                  {planHasMentions(item) ? (
+                    <div className="plan-editor-actions">
+                      <button className="btn btn-outline" onClick={() => handleCompleteMentionPlan(index)}>任务已完成</button>
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -1768,14 +1825,22 @@ function App() {
           {notifications.length === 0 ? (
             <div className="notification-empty">暂无通知</div>
           ) : notifications.map((notification) => (
-            <div key={notification.id} className={`notification-item ${notification.readAt ? "" : "unread"}`}>
+            <div key={notification.id} className={`notification-item ${notification.readAt ? "" : "unread"} ${notification.completedAt ? "completed" : ""}`}>
               <div className="notification-item-head">
-                <span>{notificationActorLabel(notification)} 提到了你</span>
+                <span>{notification.completedAt ? `${notificationCompletedByLabel(notification)} 标记任务已完成` : `${notificationActorLabel(notification)} 提到了你`}</span>
                 <time>{notification.createdAt ? new Date(notification.createdAt).toLocaleString() : ""}</time>
               </div>
               <div className="notification-item-title">{notification.sourceTitle}</div>
               {notification.sourceContent ? <div className="notification-item-content">{notification.sourceContent}</div> : null}
-              <div className="notification-item-meta">{notificationMeta(notification)}</div>
+              <div className="notification-item-meta">
+                {notificationMeta(notification)}
+                {notification.completedAt ? ` · 已完成 ${new Date(notification.completedAt).toLocaleString()}` : ""}
+              </div>
+              {!notification.completedAt ? (
+                <div className="notification-item-actions">
+                  <button className="btn btn-outline" onClick={() => handleCompleteNotification(notification)}>任务已完成</button>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

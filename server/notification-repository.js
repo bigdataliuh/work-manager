@@ -6,6 +6,7 @@ function normalizeNotification(row) {
   if (!row) return null;
   return {
     id: Number(row.id),
+    sourceKey: row.source_key,
     sourceType: row.source_type,
     sourceTitle: row.source_title,
     sourceContent: row.source_content,
@@ -20,6 +21,12 @@ function normalizeNotification(row) {
       username: row.workspace_username || "",
       displayName: row.workspace_display_name || ""
     },
+    completedByUser: {
+      id: row.completed_by_user_id ? Number(row.completed_by_user_id) : null,
+      username: row.completed_by_username || "",
+      displayName: row.completed_by_display_name || ""
+    },
+    completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : null,
     readAt: row.read_at ? new Date(row.read_at).toISOString() : null,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : null
   };
@@ -151,16 +158,54 @@ export async function ensureNotificationSchema() {
       source_title VARCHAR(255) NOT NULL,
       source_content TEXT NOT NULL,
       source_meta VARCHAR(255) NOT NULL DEFAULT '',
+      completed_at TIMESTAMP NULL DEFAULT NULL,
+      completed_by_user_id INT UNSIGNED NULL DEFAULT NULL,
       read_at TIMESTAMP NULL DEFAULT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE KEY uniq_notifications_recipient_source (recipient_user_id, source_key),
       INDEX idx_notifications_recipient_created (recipient_user_id, created_at),
       INDEX idx_notifications_recipient_read (recipient_user_id, read_at),
+      INDEX idx_notifications_source_key (source_key),
+      INDEX idx_notifications_completed_at (completed_at),
       CONSTRAINT fk_notifications_recipient FOREIGN KEY (recipient_user_id) REFERENCES users(id) ON DELETE CASCADE,
       CONSTRAINT fk_notifications_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE CASCADE,
       CONSTRAINT fk_notifications_workspace FOREIGN KEY (workspace_user_id) REFERENCES users(id) ON DELETE CASCADE
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
+
+  const [columns] = await pool.query(
+    `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'notifications'
+        AND COLUMN_NAME IN ('completed_at', 'completed_by_user_id')`
+  );
+  const existingColumns = new Set(columns.map((column) => column.COLUMN_NAME));
+
+  if (!existingColumns.has("completed_at")) {
+    await pool.query("ALTER TABLE notifications ADD COLUMN completed_at TIMESTAMP NULL DEFAULT NULL AFTER source_meta");
+  }
+
+  if (!existingColumns.has("completed_by_user_id")) {
+    await pool.query("ALTER TABLE notifications ADD COLUMN completed_by_user_id INT UNSIGNED NULL DEFAULT NULL AFTER completed_at");
+  }
+
+  const [indexes] = await pool.query(
+    `SELECT INDEX_NAME
+       FROM INFORMATION_SCHEMA.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'notifications'
+        AND INDEX_NAME IN ('idx_notifications_source_key', 'idx_notifications_completed_at')`
+  );
+  const existingIndexes = new Set(indexes.map((index) => index.INDEX_NAME));
+
+  if (!existingIndexes.has("idx_notifications_source_key")) {
+    await pool.query("CREATE INDEX idx_notifications_source_key ON notifications (source_key)");
+  }
+
+  if (!existingIndexes.has("idx_notifications_completed_at")) {
+    await pool.query("CREATE INDEX idx_notifications_completed_at ON notifications (completed_at)");
+  }
 }
 
 export async function createMentionNotifications(connection, { actorUserId, workspaceUserId, beforeState, afterState }) {
@@ -224,10 +269,13 @@ export async function listNotifications(userId, { limit = 50 } = {}) {
             actor.username AS actor_username,
             actor.display_name AS actor_display_name,
             workspace.username AS workspace_username,
-            workspace.display_name AS workspace_display_name
+            workspace.display_name AS workspace_display_name,
+            completed_by.username AS completed_by_username,
+            completed_by.display_name AS completed_by_display_name
        FROM notifications
        JOIN users actor ON actor.id = notifications.actor_user_id
        JOIN users workspace ON workspace.id = notifications.workspace_user_id
+       LEFT JOIN users completed_by ON completed_by.id = notifications.completed_by_user_id
       WHERE notifications.recipient_user_id = ?
       ORDER BY notifications.created_at DESC, notifications.id DESC
       LIMIT ?`,
@@ -243,6 +291,84 @@ export async function listNotifications(userId, { limit = 50 } = {}) {
     notifications: rows.map(normalizeNotification),
     unreadCount: Number(countRows[0]?.total || 0)
   };
+}
+
+export async function completeNotificationSourceById(userId, notificationId) {
+  const id = Number(notificationId);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw Object.assign(new Error("Invalid notification id."), { code: "INVALID_NOTIFICATION_ID" });
+  }
+
+  const pool = getDbPool();
+  const [rows] = await pool.query(
+    "SELECT source_key FROM notifications WHERE id = ? AND recipient_user_id = ? LIMIT 1",
+    [id, userId]
+  );
+  if (!rows.length) {
+    throw Object.assign(new Error("Notification not found."), { code: "NOTIFICATION_NOT_FOUND" });
+  }
+
+  await pool.query(
+    `UPDATE notifications
+        SET completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+            completed_by_user_id = COALESCE(completed_by_user_id, ?),
+            read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+      WHERE source_key = ?`,
+    [userId, rows[0].source_key]
+  );
+}
+
+export async function completeNotificationSourceByTask({ actorUserId, workspaceUserId, taskId }) {
+  const safeWorkspaceUserId = Number(workspaceUserId);
+  const safeTaskId = String(taskId || "").trim();
+  if (!Number.isInteger(safeWorkspaceUserId) || safeWorkspaceUserId <= 0 || !safeTaskId) {
+    throw Object.assign(new Error("Invalid mention source."), { code: "INVALID_MENTION_SOURCE" });
+  }
+
+  const sourcePrefix = `${safeWorkspaceUserId}:task:${safeTaskId}:`;
+  const pool = getDbPool();
+  const [result] = await pool.query(
+    `UPDATE notifications
+        SET completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+            completed_by_user_id = COALESCE(completed_by_user_id, ?)
+      WHERE workspace_user_id = ?
+        AND source_type = 'task'
+        AND source_key LIKE CONCAT(?, '%')`,
+    [actorUserId, safeWorkspaceUserId, sourcePrefix]
+  );
+
+  return Number(result.affectedRows || 0);
+}
+
+export async function completeNotificationSourceByPlan({ actorUserId, workspaceUserId, taskId, day, index }) {
+  const safeWorkspaceUserId = Number(workspaceUserId);
+  const safeTaskId = String(taskId || "").trim();
+  const safeDay = String(day || "").trim();
+  const safeIndex = Number(index);
+  if (
+    !Number.isInteger(safeWorkspaceUserId) ||
+    safeWorkspaceUserId <= 0 ||
+    !safeTaskId ||
+    !safeDay ||
+    !Number.isInteger(safeIndex) ||
+    safeIndex < 0
+  ) {
+    throw Object.assign(new Error("Invalid mention source."), { code: "INVALID_MENTION_SOURCE" });
+  }
+
+  const sourcePrefix = `${safeWorkspaceUserId}:plan:${safeTaskId}:${safeDay}:${safeIndex}:`;
+  const pool = getDbPool();
+  const [result] = await pool.query(
+    `UPDATE notifications
+        SET completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+            completed_by_user_id = COALESCE(completed_by_user_id, ?)
+      WHERE workspace_user_id = ?
+        AND source_type = 'plan'
+        AND source_key LIKE CONCAT(?, '%')`,
+    [actorUserId, safeWorkspaceUserId, sourcePrefix]
+  );
+
+  return Number(result.affectedRows || 0);
 }
 
 export async function markNotificationsRead(userId, ids = []) {

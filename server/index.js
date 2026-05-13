@@ -21,6 +21,9 @@ import {
   updateUser
 } from "./auth-repository.js";
 import {
+  completeNotificationSourceById,
+  completeNotificationSourceByPlan,
+  completeNotificationSourceByTask,
   ensureNotificationSchema,
   listNotifications,
   markNotificationsRead
@@ -193,6 +196,61 @@ app.post("/api/notifications/read", requireAuth, async (request, response, next)
     await markNotificationsRead(request.user.id, request.body?.ids);
     response.json({ ok: true });
   } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/notifications/:id/complete", requireAuth, async (request, response, next) => {
+  try {
+    await completeNotificationSourceById(request.user.id, request.params.id);
+    response.json({ ok: true });
+  } catch (error) {
+    if (["INVALID_NOTIFICATION_ID", "NOTIFICATION_NOT_FOUND"].includes(error?.code)) {
+      response.status(error.code === "NOTIFICATION_NOT_FOUND" ? 404 : 400).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.post("/api/mentions/task-complete", requireAuth, async (request, response, next) => {
+  try {
+    const userId = await resolveStateUserId(request, response);
+    if (!userId) return;
+
+    const completedCount = await completeNotificationSourceByTask({
+      actorUserId: request.user.id,
+      workspaceUserId: userId,
+      taskId: request.body?.taskId
+    });
+    response.json({ ok: true, completedCount });
+  } catch (error) {
+    if (error?.code === "INVALID_MENTION_SOURCE") {
+      response.status(400).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.post("/api/mentions/plan-complete", requireAuth, async (request, response, next) => {
+  try {
+    const userId = await resolveStateUserId(request, response);
+    if (!userId) return;
+
+    const completedCount = await completeNotificationSourceByPlan({
+      actorUserId: request.user.id,
+      workspaceUserId: userId,
+      taskId: request.body?.taskId,
+      day: request.body?.day,
+      index: request.body?.index
+    });
+    response.json({ ok: true, completedCount });
+  } catch (error) {
+    if (error?.code === "INVALID_MENTION_SOURCE") {
+      response.status(400).json({ message: error.message });
+      return;
+    }
     next(error);
   }
 });

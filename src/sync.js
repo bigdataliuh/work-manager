@@ -162,6 +162,28 @@ export async function markNotificationsRead(ids = []) {
   });
 }
 
+export async function completeNotification(notificationId) {
+  await request(`/notifications/${encodeURIComponent(notificationId)}/complete`, {
+    method: "POST"
+  });
+}
+
+export async function completeMentionTask(userId, taskId) {
+  const json = await request("/mentions/task-complete", {
+    method: "POST",
+    body: JSON.stringify({ userId, taskId })
+  });
+  return json.completedCount || 0;
+}
+
+export async function completeMentionPlan(userId, taskId, day, index) {
+  const json = await request("/mentions/plan-complete", {
+    method: "POST",
+    body: JSON.stringify({ userId, taskId, day, index })
+  });
+  return json.completedCount || 0;
+}
+
 export async function gistCreate(_token, data) {
   const workspaceId = DEFAULT_WORKSPACE_ID;
   const json = await request(statePath(workspaceId), {

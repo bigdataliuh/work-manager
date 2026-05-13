@@ -1182,6 +1182,20 @@ textarea {
   background: #f7faff;
 }
 
+.notification-item.completed {
+  border-color: #e5e7eb;
+  border-left-color: #9ca3af;
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.notification-item.completed .notification-item-title,
+.notification-item.completed .notification-item-head span,
+.notification-item.completed .notification-item-content,
+.notification-item.completed .notification-item-meta {
+  color: #6b7280;
+}
+
 .notification-item-head {
   display: flex;
   justify-content: space-between;
@@ -1222,6 +1236,18 @@ textarea {
   color: var(--text-muted);
 }
 
+.notification-item-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 9px;
+}
+
+.notification-item-actions .btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
 .plan-editor-card {
   background: #f8f9ff;
   border-radius: 10px;
@@ -1239,6 +1265,18 @@ textarea {
   font-size: 11px;
   font-weight: 600;
   color: #999;
+}
+
+.plan-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.plan-editor-actions .btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
 }
 
 .ghost-icon-btn {
