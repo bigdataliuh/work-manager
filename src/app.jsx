@@ -1123,7 +1123,7 @@ function App() {
     return (
       <div className="auth-shell">
         <div className="auth-panel">
-          <div className="auth-title">工作管理系统</div>
+          <div className="auth-title">江苏文创 工作管理系统</div>
           <div className="auth-note">正在检查登录状态...</div>
         </div>
       </div>
@@ -1134,7 +1134,7 @@ function App() {
     return (
       <div className="auth-shell">
         <form className="auth-panel" onSubmit={handleLogin}>
-          <div className="auth-title">工作管理系统</div>
+          <div className="auth-title">江苏文创 工作管理系统</div>
           <div className="auth-note">使用你的部门账号登录后进入个人工作台。</div>
           <label className="field-label">账号</label>
           <input
