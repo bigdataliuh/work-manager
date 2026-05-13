@@ -14,6 +14,16 @@ function getApiBase() {
   return normalizeApiBase(globalThis.window?.WORK_MANAGER_API_BASE || "/api");
 }
 
+function getAuthToken() {
+  return sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
+}
+
+function writeAuthToken(token) {
+  if (token) {
+    sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+  }
+}
+
 function revisionKey(workspaceId = DEFAULT_WORKSPACE_ID) {
   return `${REVISION_KEY_PREFIX}:${workspaceId || DEFAULT_WORKSPACE_ID}`;
 }
@@ -34,11 +44,13 @@ function statePath(workspaceId) {
 }
 
 export async function request(path, options = {}) {
+  const authToken = getAuthToken();
   const response = await fetch(`${getApiBase()}${path}`, {
     ...options,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...(options.headers || {})
     }
   });
@@ -75,6 +87,7 @@ export async function login(username, password) {
     method: "POST",
     body: JSON.stringify({ username, password })
   });
+  writeAuthToken(json.sessionToken);
   return json.user;
 }
 
@@ -167,11 +180,11 @@ export async function gistLoad(_token, workspaceId) {
 }
 
 export function getSessionToken() {
-  return sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
+  return getAuthToken();
 }
 
-export function setSessionToken(_token) {
-  sessionStorage.setItem(SESSION_TOKEN_KEY, CONNECTED_SESSION);
+export function setSessionToken(token) {
+  writeAuthToken(token || CONNECTED_SESSION);
 }
 
 export function clearSessionToken() {

@@ -21717,6 +21717,14 @@
   function getApiBase() {
     return normalizeApiBase(globalThis.window?.WORK_MANAGER_API_BASE || "/api");
   }
+  function getAuthToken() {
+    return sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
+  }
+  function writeAuthToken(token) {
+    if (token) {
+      sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+    }
+  }
   function revisionKey(workspaceId = DEFAULT_WORKSPACE_ID) {
     return `${REVISION_KEY_PREFIX}:${workspaceId || DEFAULT_WORKSPACE_ID}`;
   }
@@ -21733,11 +21741,13 @@
     return `/state?userId=${encodeURIComponent(workspaceId)}`;
   }
   async function request(path, options = {}) {
+    const authToken = getAuthToken();
     const response = await fetch(`${getApiBase()}${path}`, {
       ...options,
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        ...authToken ? { Authorization: `Bearer ${authToken}` } : {},
         ...options.headers || {}
       }
     });
@@ -21769,6 +21779,7 @@
       method: "POST",
       body: JSON.stringify({ username, password })
     });
+    writeAuthToken(json.sessionToken);
     return json.user;
   }
   async function logout() {
@@ -21845,8 +21856,8 @@
     writeStoredRevision(targetWorkspaceId, json?.revision || 0);
     return json?.state || createEmptyRemoteState();
   }
-  function setSessionToken(_token) {
-    sessionStorage.setItem(SESSION_TOKEN_KEY, CONNECTED_SESSION);
+  function setSessionToken(token) {
+    writeAuthToken(token || CONNECTED_SESSION);
   }
   function clearSessionToken() {
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
@@ -22245,7 +22256,6 @@
       setWorkspaceUser(user);
       setGistToken("session");
       setGistId(String(user.id));
-      setSessionToken("session");
       setHasInitializedRemote(false);
       setRemoteUpdate(null);
       setAuthStatus("authenticated");

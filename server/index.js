@@ -31,9 +31,15 @@ function sendUser(response, user) {
   response.json({ user });
 }
 
+function sendLogin(response, user, sessionToken) {
+  response.json({ user, sessionToken });
+}
+
 async function requireAuth(request, response, next) {
   try {
-    const token = readSessionCookie(request);
+    const authHeader = request.headers.authorization || "";
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+    const token = bearerToken || readSessionCookie(request);
     const user = await getUserBySessionToken(token);
     if (!user) {
       response.status(401).json({ message: "Authentication required." });
@@ -96,7 +102,7 @@ app.post("/api/auth/login", async (request, response, next) => {
 
     const session = await createSession(user.id);
     response.cookie(SESSION_COOKIE, session.token, getSessionCookieOptions());
-    sendUser(response, user);
+    sendLogin(response, user, session.token);
   } catch (error) {
     next(error);
   }

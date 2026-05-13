@@ -237,7 +237,6 @@ function App() {
     setWorkspaceUser(user);
     setGistToken("session");
     setGistId(String(user.id));
-    setSessionToken("session");
     setHasInitializedRemote(false);
     setRemoteUpdate(null);
     setAuthStatus("authenticated");
