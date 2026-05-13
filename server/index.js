@@ -39,8 +39,15 @@ async function requireAuth(request, response, next) {
   try {
     const authHeader = request.headers.authorization || "";
     const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-    const token = bearerToken || readSessionCookie(request);
-    const user = await getUserBySessionToken(token);
+    const cookieToken = readSessionCookie(request);
+    let token = bearerToken;
+    let user = token ? await getUserBySessionToken(token) : null;
+
+    if (!user && cookieToken && cookieToken !== token) {
+      token = cookieToken;
+      user = await getUserBySessionToken(cookieToken);
+    }
+
     if (!user) {
       response.status(401).json({ message: "Authentication required." });
       return;
@@ -119,7 +126,7 @@ app.post("/api/auth/logout", requireAuth, async (request, response, next) => {
 });
 
 app.get("/api/auth/me", requireAuth, async (request, response) => {
-  sendUser(response, request.user);
+  sendLogin(response, request.user, request.sessionToken);
 });
 
 app.get("/api/state", requireAuth, async (request, response, next) => {

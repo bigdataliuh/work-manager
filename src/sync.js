@@ -15,7 +15,12 @@ function getApiBase() {
 }
 
 function getAuthToken() {
-  return sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
+  const token = sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
+  if (token === CONNECTED_SESSION || token === "session") {
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    return "";
+  }
+  return token;
 }
 
 function writeAuthToken(token) {
@@ -97,6 +102,7 @@ export async function logout() {
 
 export async function getCurrentUser() {
   const json = await request("/auth/me");
+  writeAuthToken(json.sessionToken);
   return json.user;
 }
 

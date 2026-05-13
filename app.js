@@ -21718,7 +21718,12 @@
     return normalizeApiBase(globalThis.window?.WORK_MANAGER_API_BASE || "/api");
   }
   function getAuthToken() {
-    return sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
+    const token = sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
+    if (token === CONNECTED_SESSION || token === "session") {
+      sessionStorage.removeItem(SESSION_TOKEN_KEY);
+      return "";
+    }
+    return token;
   }
   function writeAuthToken(token) {
     if (token) {
@@ -21787,6 +21792,7 @@
   }
   async function getCurrentUser() {
     const json = await request("/auth/me");
+    writeAuthToken(json.sessionToken);
     return json.user;
   }
   async function listAdminUsers() {
