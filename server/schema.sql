@@ -3,12 +3,14 @@ CREATE TABLE IF NOT EXISTS users (
   username VARCHAR(64) NOT NULL UNIQUE,
   display_name VARCHAR(100) NOT NULL,
   role VARCHAR(20) NOT NULL DEFAULT 'user',
+  admin_level TINYINT UNSIGNED NOT NULL DEFAULT 3,
   password_hash VARCHAR(255) NOT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   last_login_at TIMESTAMP NULL DEFAULT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_users_role (role),
+  INDEX idx_users_admin_level (admin_level),
   INDEX idx_users_active (is_active)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 

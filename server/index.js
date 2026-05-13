@@ -6,6 +6,8 @@ import {
   SESSION_COOKIE,
   authenticateUser,
   bootstrapAdminUser,
+  canAccessUserWorkspace,
+  canManageUserAccount,
   createSession,
   createUser,
   deleteSession,
@@ -14,8 +16,10 @@ import {
   getSessionCookieOptions,
   getUserById,
   getUserBySessionToken,
+  isSuperAdmin,
   listActiveUsers,
-  listUsers,
+  listVisibleUsers,
+  presentUserForActor,
   readSessionCookie,
   resetUserPassword,
   updateUser
@@ -42,7 +46,7 @@ function sendUser(response, user) {
 }
 
 function sendLogin(response, user, sessionToken) {
-  response.json({ user, sessionToken });
+  response.json({ user: presentUserForActor(user, user), sessionToken });
 }
 
 async function requireAuth(request, response, next) {
@@ -86,18 +90,63 @@ async function resolveStateUserId(request, response) {
     return null;
   }
 
-  if (requestedUserId !== request.user.id && request.user.role !== "admin") {
-    response.status(403).json({ message: "Cannot access another user's workspace." });
-    return null;
-  }
-
   const target = await getUserById(requestedUserId);
   if (!target) {
     response.status(404).json({ message: "User not found." });
     return null;
   }
 
+  if (!canAccessUserWorkspace(request.user, target)) {
+    response.status(403).json({ message: "Cannot access this workspace." });
+    return null;
+  }
+
   return target.id;
+}
+
+async function resolveManageableUser(request, response) {
+  const userId = Number(request.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    response.status(400).json({ message: "Invalid user id." });
+    return null;
+  }
+
+  const target = await getUserById(userId);
+  if (!target) {
+    response.status(404).json({ message: "User not found." });
+    return null;
+  }
+
+  if (!canManageUserAccount(request.user, target)) {
+    response.status(403).json({ message: "Cannot manage this user." });
+    return null;
+  }
+
+  return target;
+}
+
+function normalizeCreateUserBody(actor, body = {}) {
+  const normalizedRole = body.role === "admin" ? "admin" : "user";
+  if (normalizedRole === "admin" && !isSuperAdmin(actor)) {
+    throw Object.assign(new Error("Only admin can create administrator accounts."), { code: "ADMIN_LEVEL_REQUIRED" });
+  }
+
+  return {
+    ...body,
+    role: normalizedRole,
+    adminLevel: isSuperAdmin(actor) ? body.adminLevel : undefined
+  };
+}
+
+function normalizeUpdateUserBody(actor, body = {}) {
+  if (!isSuperAdmin(actor) && (body.role === "admin" || body.adminLevel !== undefined)) {
+    throw Object.assign(new Error("Only admin can change administrator permissions."), { code: "ADMIN_LEVEL_REQUIRED" });
+  }
+
+  return {
+    ...body,
+    adminLevel: isSuperAdmin(actor) ? body.adminLevel : undefined
+  };
 }
 
 app.get("/api/health", async (_request, response) => {
@@ -255,9 +304,10 @@ app.post("/api/mentions/plan-complete", requireAuth, async (request, response, n
   }
 });
 
-app.get("/api/admin/users", requireAuth, requireAdmin, async (_request, response, next) => {
+app.get("/api/admin/users", requireAuth, requireAdmin, async (request, response, next) => {
   try {
-    response.json({ users: await listUsers() });
+    const users = await listVisibleUsers(request.user);
+    response.json({ users: users.map((user) => presentUserForActor(request.user, user)) });
   } catch (error) {
     next(error);
   }
@@ -265,11 +315,11 @@ app.get("/api/admin/users", requireAuth, requireAdmin, async (_request, response
 
 app.post("/api/admin/users", requireAuth, requireAdmin, async (request, response, next) => {
   try {
-    const user = await createUser(request.body || {});
-    response.status(201).json({ user });
+    const user = await createUser(normalizeCreateUserBody(request.user, request.body || {}));
+    response.status(201).json({ user: presentUserForActor(request.user, user) });
   } catch (error) {
-    if (["INVALID_USERNAME", "INVALID_PASSWORD", "USERNAME_EXISTS"].includes(error?.code)) {
-      response.status(400).json({ message: error.message });
+    if (["INVALID_USERNAME", "INVALID_PASSWORD", "USERNAME_EXISTS", "ADMIN_LEVEL_REQUIRED"].includes(error?.code)) {
+      response.status(error.code === "ADMIN_LEVEL_REQUIRED" ? 403 : 400).json({ message: error.message });
       return;
     }
     next(error);
@@ -278,17 +328,14 @@ app.post("/api/admin/users", requireAuth, requireAdmin, async (request, response
 
 app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (request, response, next) => {
   try {
-    const userId = Number(request.params.id);
-    if (!Number.isInteger(userId) || userId <= 0) {
-      response.status(400).json({ message: "Invalid user id." });
-      return;
-    }
+    const target = await resolveManageableUser(request, response);
+    if (!target) return;
 
-    const user = await updateUser(userId, request.body || {});
-    response.json({ user });
+    const user = await updateUser(target.id, normalizeUpdateUserBody(request.user, request.body || {}));
+    response.json({ user: presentUserForActor(request.user, user) });
   } catch (error) {
-    if (error?.code === "USER_NOT_FOUND") {
-      response.status(404).json({ message: error.message });
+    if (["USER_NOT_FOUND", "ADMIN_LEVEL_REQUIRED"].includes(error?.code)) {
+      response.status(error.code === "USER_NOT_FOUND" ? 404 : 403).json({ message: error.message });
       return;
     }
     next(error);
@@ -297,19 +344,11 @@ app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (request, res
 
 app.delete("/api/admin/users/:id", requireAuth, requireAdmin, async (request, response, next) => {
   try {
-    const userId = Number(request.params.id);
-    if (!Number.isInteger(userId) || userId <= 0) {
-      response.status(400).json({ message: "Invalid user id." });
-      return;
-    }
+    const target = await resolveManageableUser(request, response);
+    if (!target) return;
 
-    if (userId === request.user.id) {
-      response.status(400).json({ message: "Cannot delete the current user." });
-      return;
-    }
-
-    const user = await deleteUser(userId);
-    response.json({ user });
+    const user = await deleteUser(target.id);
+    response.json({ user: presentUserForActor(request.user, user) });
   } catch (error) {
     if (error?.code === "USER_NOT_FOUND") {
       response.status(404).json({ message: error.message });
@@ -321,14 +360,11 @@ app.delete("/api/admin/users/:id", requireAuth, requireAdmin, async (request, re
 
 app.post("/api/admin/users/:id/password", requireAuth, requireAdmin, async (request, response, next) => {
   try {
-    const userId = Number(request.params.id);
-    if (!Number.isInteger(userId) || userId <= 0) {
-      response.status(400).json({ message: "Invalid user id." });
-      return;
-    }
+    const target = await resolveManageableUser(request, response);
+    if (!target) return;
 
-    const user = await resetUserPassword(userId, request.body?.password);
-    response.json({ user });
+    const user = await resetUserPassword(target.id, request.body?.password);
+    response.json({ user: presentUserForActor(request.user, user) });
   } catch (error) {
     if (["INVALID_PASSWORD", "USER_NOT_FOUND"].includes(error?.code)) {
       response.status(error.code === "USER_NOT_FOUND" ? 404 : 400).json({ message: error.message });

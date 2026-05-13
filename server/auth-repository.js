@@ -7,19 +7,31 @@ export const SESSION_COOKIE = "work_manager_session";
 
 const scryptAsync = promisify(crypto.scrypt);
 const SESSION_TTL_DAYS = Number(process.env.SESSION_TTL_DAYS || 14);
+const SUPER_ADMIN_USERNAME = normalizeUsername(process.env.ADMIN_USERNAME || "admin");
+
+function normalizeAdminLevel(value) {
+  const level = Number(value);
+  return [1, 2, 3].includes(level) ? level : 3;
+}
 
 function normalizeUser(row) {
   if (!row) return null;
-  return {
+  const user = {
     id: Number(row.id),
     username: row.username,
-    displayName: row.display_name,
+    displayName: row.display_name ?? row.displayName,
     role: row.role,
-    isActive: Boolean(row.is_active),
-    createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
-    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
-    lastLoginAt: row.last_login_at ? new Date(row.last_login_at).toISOString() : null
+    isActive: row.is_active === undefined ? Boolean(row.isActive) : Boolean(row.is_active),
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : row.createdAt || null,
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : row.updatedAt || null,
+    lastLoginAt: row.last_login_at ? new Date(row.last_login_at).toISOString() : row.lastLoginAt || null
   };
+
+  if (user.role === "admin") {
+    user.adminLevel = normalizeUsername(user.username) === SUPER_ADMIN_USERNAME ? 1 : normalizeAdminLevel(row.admin_level ?? row.adminLevel);
+  }
+
+  return user;
 }
 
 function publicUser(row) {
@@ -48,6 +60,45 @@ function validatePassword(password) {
       code: "INVALID_PASSWORD"
     });
   }
+}
+
+function canViewAdminTargetByLevel(actor, target) {
+  if (target.role !== "admin") return true;
+  const actorLevel = normalizeAdminLevel(actor.adminLevel);
+  const targetLevel = normalizeAdminLevel(target.adminLevel);
+
+  if (actorLevel === 1) return true;
+  if (actorLevel === 2) return targetLevel > 2;
+  return false;
+}
+
+export function isSuperAdmin(user) {
+  return user?.role === "admin" && normalizeUsername(user.username) === SUPER_ADMIN_USERNAME;
+}
+
+export function canAccessUserWorkspace(actor, target) {
+  if (!actor || !target) return false;
+  if (actor.id === target.id) return true;
+  if (actor.role !== "admin") return false;
+  if (isSuperAdmin(actor)) return true;
+  if (isSuperAdmin(target)) return false;
+  return canViewAdminTargetByLevel(actor, target);
+}
+
+export function canManageUserAccount(actor, target) {
+  if (!actor || !target) return false;
+  if (actor.id === target.id) return false;
+  if (isSuperAdmin(actor)) return true;
+  if (target.role === "admin") return false;
+  return canAccessUserWorkspace(actor, target);
+}
+
+export function presentUserForActor(actor, user) {
+  const normalizedUser = normalizeUser(user);
+  if (!normalizedUser) return null;
+  if (isSuperAdmin(actor) && normalizedUser.role === "admin") return normalizedUser;
+  const { adminLevel: _adminLevel, ...visibleUser } = normalizedUser;
+  return visibleUser;
 }
 
 async function hashPassword(password) {
@@ -96,15 +147,39 @@ export async function ensureAuthSchema() {
       username VARCHAR(64) NOT NULL UNIQUE,
       display_name VARCHAR(100) NOT NULL,
       role VARCHAR(20) NOT NULL DEFAULT 'user',
+      admin_level TINYINT UNSIGNED NOT NULL DEFAULT 3,
       password_hash VARCHAR(255) NOT NULL,
       is_active TINYINT(1) NOT NULL DEFAULT 1,
       last_login_at TIMESTAMP NULL DEFAULT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_users_role (role),
+      INDEX idx_users_admin_level (admin_level),
       INDEX idx_users_active (is_active)
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
+
+  const [adminLevelColumns] = await pool.query(
+    `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'users'
+        AND COLUMN_NAME = 'admin_level'`
+  );
+  if (!adminLevelColumns.length) {
+    await pool.query("ALTER TABLE users ADD COLUMN admin_level TINYINT UNSIGNED NOT NULL DEFAULT 3 AFTER role");
+  }
+
+  const [adminLevelIndexes] = await pool.query(
+    `SELECT INDEX_NAME
+       FROM INFORMATION_SCHEMA.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'users'
+        AND INDEX_NAME = 'idx_users_admin_level'`
+  );
+  if (!adminLevelIndexes.length) {
+    await pool.query("ALTER TABLE users ADD INDEX idx_users_admin_level (admin_level)");
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sessions (
@@ -119,6 +194,14 @@ export async function ensureAuthSchema() {
       CONSTRAINT fk_sessions_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
+
+  await pool.query(
+    "UPDATE users SET admin_level = 1 WHERE username = ? AND role = 'admin'",
+    [SUPER_ADMIN_USERNAME]
+  );
+  await pool.query(
+    "UPDATE users SET admin_level = 3 WHERE role = 'admin' AND admin_level NOT IN (1, 2, 3)"
+  );
 }
 
 export async function bootstrapAdminUser() {
@@ -138,7 +221,7 @@ export async function bootstrapAdminUser() {
 
   const passwordHash = await hashPassword(password);
   const [result] = await pool.query(
-    "INSERT INTO users (username, display_name, role, password_hash, is_active) VALUES (?, ?, 'admin', ?, 1)",
+    "INSERT INTO users (username, display_name, role, admin_level, password_hash, is_active) VALUES (?, ?, 'admin', 1, ?, 1)",
     [username, displayName, passwordHash]
   );
 
@@ -147,6 +230,7 @@ export async function bootstrapAdminUser() {
     username,
     displayName,
     role: "admin",
+    adminLevel: 1,
     isActive: true
   };
 }
@@ -229,9 +313,14 @@ export function readSessionCookie(request) {
 export async function listUsers() {
   const pool = getDbPool();
   const [rows] = await pool.query(
-    "SELECT * FROM users ORDER BY role = 'admin' DESC, is_active DESC, username ASC"
+    "SELECT * FROM users ORDER BY role = 'admin' DESC, admin_level ASC, is_active DESC, username ASC"
   );
   return rows.map(publicUser);
+}
+
+export async function listVisibleUsers(actor) {
+  const users = await listUsers();
+  return users.filter((user) => canAccessUserWorkspace(actor, user));
 }
 
 export async function listActiveUsers() {
@@ -248,20 +337,21 @@ export async function getUserById(userId) {
   return publicUser(rows[0]);
 }
 
-export async function createUser({ username: usernameInput, displayName: displayNameInput, password, role = "user" }) {
+export async function createUser({ username: usernameInput, displayName: displayNameInput, password, role = "user", adminLevel } = {}) {
   const username = normalizeUsername(usernameInput);
   validateUsername(username);
   validatePassword(password);
 
   const normalizedRole = role === "admin" ? "admin" : "user";
+  const normalizedAdminLevel = normalizedRole === "admin" ? normalizeAdminLevel(adminLevel) : 3;
   const displayName = normalizeDisplayName(displayNameInput, username);
   const passwordHash = await hashPassword(password);
   const pool = getDbPool();
 
   try {
     const [result] = await pool.query(
-      "INSERT INTO users (username, display_name, role, password_hash, is_active) VALUES (?, ?, ?, ?, 1)",
-      [username, displayName, normalizedRole, passwordHash]
+      "INSERT INTO users (username, display_name, role, admin_level, password_hash, is_active) VALUES (?, ?, ?, ?, ?, 1)",
+      [username, displayName, normalizedRole, normalizedAdminLevel, passwordHash]
     );
     return getUserById(result.insertId);
   } catch (error) {
@@ -272,7 +362,7 @@ export async function createUser({ username: usernameInput, displayName: display
   }
 }
 
-export async function updateUser(userId, { displayName, role, isActive }) {
+export async function updateUser(userId, { displayName, role, adminLevel, isActive }) {
   const target = await getUserById(userId);
   if (!target) {
     throw Object.assign(new Error("User not found."), { code: "USER_NOT_FOUND" });
@@ -280,12 +370,13 @@ export async function updateUser(userId, { displayName, role, isActive }) {
 
   const nextDisplayName = displayName === undefined ? target.displayName : normalizeDisplayName(displayName, target.username);
   const nextRole = role === "admin" ? "admin" : "user";
+  const nextAdminLevel = nextRole === "admin" ? normalizeAdminLevel(adminLevel === undefined ? target.adminLevel : adminLevel) : 3;
   const nextActive = isActive === undefined ? target.isActive : Boolean(isActive);
   const pool = getDbPool();
 
   await pool.query(
-    "UPDATE users SET display_name = ?, role = ?, is_active = ? WHERE id = ?",
-    [nextDisplayName, nextRole, nextActive ? 1 : 0, userId]
+    "UPDATE users SET display_name = ?, role = ?, admin_level = ?, is_active = ? WHERE id = ?",
+    [nextDisplayName, nextRole, nextAdminLevel, nextActive ? 1 : 0, userId]
   );
 
   if (!nextActive) {

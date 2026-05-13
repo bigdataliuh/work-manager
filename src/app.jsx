@@ -202,7 +202,7 @@ function App() {
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [loginError, setLoginError] = useState("");
   const [adminUsers, setAdminUsers] = useState([]);
-  const [adminUserForm, setAdminUserForm] = useState({ username: "", displayName: "", password: "", role: "user" });
+  const [adminUserForm, setAdminUserForm] = useState({ username: "", displayName: "", password: "", role: "user", adminLevel: 3 });
   const [mentionUsers, setMentionUsers] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -231,6 +231,7 @@ function App() {
   }
 
   const isAdmin = currentUser?.role === "admin";
+  const isSuperAdmin = currentUser?.role === "admin" && currentUser?.username === "admin";
 
   async function refreshMentionUsers() {
     const users = await listMentionUsers();
@@ -330,8 +331,8 @@ function App() {
   async function handleCreateAdminUser(event) {
     event.preventDefault();
     try {
-      await createAdminUser(adminUserForm);
-      setAdminUserForm({ username: "", displayName: "", password: "", role: "user" });
+      await createAdminUser(isSuperAdmin ? adminUserForm : { ...adminUserForm, role: "user", adminLevel: undefined });
+      setAdminUserForm({ username: "", displayName: "", password: "", role: "user", adminLevel: 3 });
       await refreshAdminUsers();
       pushToast("账号已创建");
     } catch (error) {
@@ -345,9 +346,13 @@ function App() {
       pushToast("不能停用当前登录账号", "warning");
       return;
     }
+    if (!canManageListedUser(user)) {
+      pushToast("不能管理该管理员账号", "warning");
+      return;
+    }
 
     try {
-      await updateAdminUser(user.id, { isActive: !user.isActive, role: user.role, displayName: user.displayName });
+      await updateAdminUser(user.id, { isActive: !user.isActive, role: user.role, adminLevel: user.adminLevel, displayName: user.displayName });
       await refreshAdminUsers();
       pushToast(user.isActive ? "账号已停用" : "账号已启用", "warning");
     } catch (error) {
@@ -359,6 +364,10 @@ function App() {
   function handleDeleteAdminUser(user) {
     if (user.id === currentUser?.id) {
       pushToast("不能删除当前登录账号", "warning");
+      return;
+    }
+    if (!canManageListedUser(user)) {
+      pushToast("不能删除该管理员账号", "warning");
       return;
     }
 
@@ -387,6 +396,11 @@ function App() {
   }
 
   async function handleResetUserPassword(user) {
+    if (!canManageListedUser(user)) {
+      pushToast("不能重置该管理员账号密码", "warning");
+      return;
+    }
+
     const password = window.prompt(`输入 ${user.displayName || user.username} 的新密码，至少 8 位`);
     if (!password) return;
 
@@ -398,6 +412,21 @@ function App() {
       console.error(error);
       pushToast(error.message || "密码重置失败", "error");
     }
+  }
+
+  function canManageListedUser(user) {
+    return isSuperAdmin || user.role !== "admin";
+  }
+
+  function adminRoleLabel(user) {
+    if (user.role !== "admin") return "普通用户";
+    if (!isSuperAdmin) return "管理员";
+    const levelLabels = {
+      1: "一级管理员",
+      2: "二级管理员",
+      3: "三级管理员"
+    };
+    return levelLabels[user.adminLevel] || "三级管理员";
   }
 
   async function openNotifications() {
@@ -1725,14 +1754,27 @@ function App() {
                 onChange={(event) => setAdminUserForm((current) => ({ ...current, password: event.target.value }))}
                 placeholder="初始密码，至少 8 位"
               />
-              <select
-                className="field-select"
-                value={adminUserForm.role}
-                onChange={(event) => setAdminUserForm((current) => ({ ...current, role: event.target.value }))}
-              >
-                <option value="user">普通用户</option>
-                <option value="admin">管理员</option>
-              </select>
+              {isSuperAdmin ? (
+                <select
+                  className="field-select"
+                  value={adminUserForm.role}
+                  onChange={(event) => setAdminUserForm((current) => ({ ...current, role: event.target.value }))}
+                >
+                  <option value="user">普通用户</option>
+                  <option value="admin">管理员</option>
+                </select>
+              ) : null}
+              {isSuperAdmin && adminUserForm.role === "admin" ? (
+                <select
+                  className="field-select"
+                  value={adminUserForm.adminLevel}
+                  onChange={(event) => setAdminUserForm((current) => ({ ...current, adminLevel: Number(event.target.value) }))}
+                >
+                  <option value={1}>一级管理员</option>
+                  <option value={2}>二级管理员</option>
+                  <option value={3}>三级管理员</option>
+                </select>
+              ) : null}
               <button className="btn btn-dark" type="submit">创建账号</button>
             </form>
             <div className="admin-user-list">
@@ -1741,18 +1783,22 @@ function App() {
                   <div className="admin-user-main">
                     <div className="admin-user-name">{user.displayName || user.username}</div>
                     <div className="admin-user-meta">
-                      {user.username} · {user.role === "admin" ? "管理员" : "普通用户"} · {user.isActive ? "启用" : "停用"}
+                      {user.username} · {adminRoleLabel(user)} · {user.isActive ? "启用" : "停用"}
                     </div>
                   </div>
                   <div className="admin-user-actions">
                     <button className="btn btn-outline" onClick={() => switchWorkspaceUser(user)}>工作台</button>
-                    <button className="btn btn-outline" onClick={() => handleResetUserPassword(user)}>重置密码</button>
-                    <button className="btn btn-danger" onClick={() => handleToggleUserActive(user)} disabled={user.id === currentUser?.id}>
-                      {user.isActive ? "停用" : "启用"}
-                    </button>
-                    <button className="btn btn-danger" onClick={() => handleDeleteAdminUser(user)} disabled={user.id === currentUser?.id}>
-                      删除
-                    </button>
+                    {canManageListedUser(user) ? (
+                      <>
+                        <button className="btn btn-outline" onClick={() => handleResetUserPassword(user)}>重置密码</button>
+                        <button className="btn btn-danger" onClick={() => handleToggleUserActive(user)} disabled={user.id === currentUser?.id}>
+                          {user.isActive ? "停用" : "启用"}
+                        </button>
+                        <button className="btn btn-danger" onClick={() => handleDeleteAdminUser(user)} disabled={user.id === currentUser?.id}>
+                          删除
+                        </button>
+                      </>
+                    ) : null}
                   </div>
                 </div>
               ))}
