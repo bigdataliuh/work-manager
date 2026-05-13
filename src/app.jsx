@@ -6,6 +6,7 @@ import {
   dayLabel,
   defaultData,
   fmtDate,
+  formatDateInput,
   formatDeadline,
   getCellItems,
   getMonday,
@@ -108,9 +109,43 @@ function dataReducer(state, action) {
         })
       });
 
+    case "rolloverItem": {
+      const nextDay = getNextDayKey(action.day);
+      if (!nextDay) return state;
+
+      return updateTimestamp({
+        ...state,
+        tasks: state.tasks.map((task) => {
+          if (task.id !== action.taskId) return task;
+          const items = getCellItems(task, action.day);
+          if (!items || !items[action.index]) return task;
+
+          const itemToMove = { ...items[action.index], done: false };
+          const remainingItems = items.filter((_, index) => index !== action.index);
+          const nextDayItems = getCellItems(task, nextDay) || [];
+          const nextDailyActions = {
+            ...task.dailyActions,
+            [nextDay]: [...nextDayItems, itemToMove]
+          };
+
+          if (remainingItems.length) nextDailyActions[action.day] = remainingItems;
+          else delete nextDailyActions[action.day];
+
+          return { ...task, dailyActions: nextDailyActions };
+        })
+      });
+    }
+
     default:
       return state;
   }
+}
+
+function getNextDayKey(day) {
+  const date = new Date(`${day}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + 1);
+  return dateKey(date);
 }
 
 function createToast(message, type = "success") {
@@ -124,6 +159,10 @@ function App() {
   const [desktopVisibility, setDesktopVisibility] = useState("active");
   const [showAdd, setShowAdd] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
+  const [archiveQuery, setArchiveQuery] = useState("");
+  const [archiveCategory, setArchiveCategory] = useState("全部");
+  const [archiveSort, setArchiveSort] = useState("latest");
+  const [archiveDetailTask, setArchiveDetailTask] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [editCell, setEditCell] = useState(null);
@@ -291,8 +330,15 @@ function App() {
   const weekStart = dateKey(days[0]);
   const weekEnd = dateKey(days[6]);
 
-  function hasItemsThisWeek(task) {
-    return days.some((date) => Boolean(getCellItems(task, dateKey(date))));
+  function hasItemsAroundToday(task) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return [-1, 0, 1].some((offset) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() + offset);
+      return Boolean(getCellItems(task, dateKey(date)));
+    });
   }
 
   function hasNearbyDeadline(task) {
@@ -300,10 +346,25 @@ function App() {
     return task.deadlineDate >= weekStart && task.deadlineDate <= weekEnd;
   }
 
+  function getLatestPlanSummary(task) {
+    const entries = Object.entries(task.dailyActions || {})
+      .filter(([, items]) => Array.isArray(items) && items.length)
+      .sort(([left], [right]) => right.localeCompare(left));
+    if (!entries.length) return "";
+    const [, items] = entries[0];
+    const first = items[0];
+    return first?.title || first?.content || "";
+  }
+
+  function getArchivePlanDays(task) {
+    return Object.entries(task.dailyActions || {})
+      .filter(([, items]) => Array.isArray(items) && items.length)
+      .sort(([left], [right]) => right.localeCompare(left));
+  }
+
   function isActiveTask(task) {
-    if (hasItemsThisWeek(task)) return true;
+    if (hasItemsAroundToday(task)) return true;
     if (hasNearbyDeadline(task)) return true;
-    if (task.status === "进行中" && task.priority === "高") return true;
     return false;
   }
 
@@ -345,6 +406,34 @@ function App() {
       );
     })
   );
+
+  const archiveSearch = archiveQuery.trim().toLowerCase();
+  const archiveTasks = [...data.archivedTasks]
+    .filter((task) => {
+      if (archiveCategory !== "全部" && task.category !== archiveCategory) return false;
+      if (!archiveSearch) return true;
+
+      return (
+        task.name.toLowerCase().includes(archiveSearch) ||
+        task.category.toLowerCase().includes(archiveSearch) ||
+        task.responsible.toLowerCase().includes(archiveSearch) ||
+        task.participants.toLowerCase().includes(archiveSearch) ||
+        formatDeadline(task).toLowerCase().includes(archiveSearch) ||
+        getLatestPlanSummary(task).toLowerCase().includes(archiveSearch)
+      );
+    })
+    .sort((left, right) => {
+      if (archiveSort === "earliest") {
+        return new Date(left.archivedAt || 0).getTime() - new Date(right.archivedAt || 0).getTime();
+      }
+
+      if (archiveSort === "category") {
+        const categoryDiff = left.category.localeCompare(right.category, "zh-CN");
+        if (categoryDiff !== 0) return categoryDiff;
+      }
+
+      return new Date(right.archivedAt || 0).getTime() - new Date(left.archivedAt || 0).getTime();
+    });
 
   function askConfirm({ title, message, confirmLabel, confirmTone = "dark", onConfirm }) {
     setConfirmState({ title, message, confirmLabel, confirmTone, onConfirm });
@@ -443,6 +532,28 @@ function App() {
     pushToast("分类已删除并迁移任务", "warning");
   }
 
+  function duplicateArchivedTask(task) {
+    const copiedTask = normalizeData({
+      categories: data.categories,
+      tasks: [{ ...task, id: genId(), status: "待启动", archivedAt: undefined }],
+      archivedTasks: []
+    }).tasks[0];
+
+    dispatch({
+      type: "replace",
+      data: {
+        ...data,
+        tasks: [...data.tasks, copiedTask]
+      }
+    });
+    setShowArchive(false);
+    pushToast("已复制为新任务");
+  }
+
+  function openArchiveDetail(task) {
+    setArchiveDetailTask(task);
+  }
+
   function handleAddTask() {
     if (!newTask.name.trim()) {
       pushToast("任务名称不能为空", "warning");
@@ -478,6 +589,12 @@ function App() {
     setEditCell(null);
     setCellItems([{ title: "", content: "", done: false }]);
     pushToast(validItems.length ? "计划已保存" : "计划已清空");
+  }
+
+  function handleRolloverItem(taskId, day, index) {
+    dispatch({ type: "rolloverItem", taskId, day, index });
+    setExpandedCell(null);
+    pushToast("未完成计划已平移到次日", "warning");
   }
 
   function handleImportFile(event) {
@@ -695,29 +812,46 @@ function App() {
       ) : null}
 
       <div className="header">
-        <div className="header-top">
-          <h1>📋 {isMobile ? "工作管理" : "刘昊的工作管理系统"}</h1>
-          <div className="header-actions">
-            {gistId ? <span className={`sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}`}>☁ {syncStatus === "ok" ? "已同步" : syncStatus === "error" ? "失败" : "同步中"}</span> : null}
-            <button className="btn btn-ghost" onClick={() => setShowSettings(true)}>⚙</button>
-            {!isMobile ? <button className="btn btn-ghost" onClick={() => setShowArchive(true)}>已完结</button> : null}
-            {isMobile ? <button className="btn btn-ghost" onClick={() => setMobileDay(dateKey(new Date()))}>今日</button> : null}
-            {!isMobile ? <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ 新任务</button> : null}
-          </div>
-        </div>
-        {!isMobile ? (
-          <div className="week-nav">
-            <button onClick={() => setWeekOffset((current) => current - 1)}>‹</button>
-            <div className="week-info">
-              {fmtDate(days[0])} - {fmtDate(days[6])}
-              {weekOffset === 0 ? <span className="badge-week">本周</span> : null}
-            </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button className="btn-today" onClick={scrollToToday}>今日</button>
-              <button onClick={() => setWeekOffset((current) => current + 1)}>›</button>
+        {isMobile ? (
+          <div className="header-top">
+            <h1>📋 工作管理</h1>
+            <div className="header-actions">
+              {gistId ? <span className={`sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}`}>☁ {syncStatus === "ok" ? "已同步" : syncStatus === "error" ? "失败" : "同步中"}</span> : null}
+              <button className="btn btn-ghost" onClick={() => setShowSettings(true)}>⚙</button>
+              <button className="btn btn-ghost" onClick={() => setMobileDay(dateKey(new Date()))}>今日</button>
             </div>
           </div>
-        ) : null}
+        ) : (
+          <div className="header-desktop">
+            <div className="header-brand">
+              <div className="header-brand-mark">
+                <img src="./assets/jiangsu-wenchuang-mark.png" alt="江苏文创" className="header-brand-logo" />
+              </div>
+              <div className="header-brand-copy">
+                <h1>刘昊的工作台</h1>
+              </div>
+            </div>
+
+            <div className="header-center">
+              <div className="week-nav">
+                <button className="week-nav-arrow" onClick={() => setWeekOffset((current) => current - 1)}>‹</button>
+                <div className="week-nav-core">
+                  <div className="week-info">{fmtDate(days[0])} - {fmtDate(days[6])}</div>
+                  {weekOffset === 0 ? <span className="badge-week">本周</span> : null}
+                  <button className="btn-today" onClick={scrollToToday}>今日</button>
+                </div>
+                <button className="week-nav-arrow" onClick={() => setWeekOffset((current) => current + 1)}>›</button>
+              </div>
+            </div>
+
+            <div className="header-actions">
+              {gistId ? <span className={`sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}`}>☁ {syncStatus === "ok" ? "已同步" : syncStatus === "error" ? "失败" : "同步中"}</span> : null}
+              <button className="btn btn-ghost" onClick={() => setShowArchive(true)}>已完结</button>
+              <button className="btn btn-ghost btn-icon" onClick={() => setShowSettings(true)}>⚙</button>
+              <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ 新任务</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {remoteUpdate ? (
@@ -743,12 +877,13 @@ function App() {
           setFilterCat={setFilterCat}
           getCellItems={getCellItems}
           onToggleItemDone={(taskId, day, index) => dispatch({ type: "toggleItemDone", taskId, day, index })}
+          onRolloverItem={handleRolloverItem}
           onEditTask={setEditTask}
           onEditCell={setEditCell}
           setCellItems={setCellItems}
         />
       ) : (
-        <>
+        <div className="desktop-shell">
           <div className="filter-bar">
             {["全部", ...data.categories].map((category) => (
               <button
@@ -761,14 +896,14 @@ function App() {
               </button>
             ))}
             <div className="desktop-visibility-switch">
-              <button className={`filter-btn ${desktopVisibility === "active" ? "active" : ""}`} onClick={() => setDesktopVisibility("active")}>
+              <button className={`filter-btn visibility-toggle-btn ${desktopVisibility === "active" ? "active" : ""}`} onClick={() => setDesktopVisibility("active")}>
                 仅活跃
               </button>
-              <button className={`filter-btn ${desktopVisibility === "all" ? "active" : ""}`} onClick={() => setDesktopVisibility("all")}>
+              <button className={`filter-btn visibility-toggle-btn ${desktopVisibility === "all" ? "active" : ""}`} onClick={() => setDesktopVisibility("all")}>
                 含静默
               </button>
             </div>
-            <div style={{ marginLeft: "auto", flexShrink: 0 }}>
+            <div className="filter-search-wrap">
               <input className="search-input" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="🔍 搜索任务…" />
             </div>
           </div>
@@ -835,7 +970,11 @@ function App() {
                                 <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                                   {items.map((item, index) => (
                                     <div key={`${expandedKey}-${index}`}>
-                                      {renderCompactPlanItem(item, () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }))}
+                                      {renderCompactPlanItem(
+                                        item,
+                                        () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }),
+                                        () => handleRolloverItem(task.id, day, index)
+                                      )}
                                     </div>
                                   ))}
                                 </div>
@@ -843,24 +982,22 @@ function App() {
                                 <div className="cell-expanded" onClick={(event) => event.stopPropagation()}>
                                   {items.map((item, index) => (
                                     <div key={`${expandedKey}-full-${index}`} style={{ display: "flex", alignItems: "flex-start", gap: 6, marginBottom: index < items.length - 1 ? 10 : 0 }}>
-                                      <span
-                                        onClick={() => dispatch({ type: "toggleItemDone", taskId: task.id, day, index })}
-                                        style={{
-                                          flexShrink: 0,
-                                          marginTop: 2,
-                                          width: 14,
-                                          height: 14,
-                                          borderRadius: 3,
-                                          border: `1.5px solid ${item.done ? "#22c55e" : "#ccc"}`,
-                                          background: item.done ? "#22c55e" : "transparent",
-                                          display: "flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          cursor: "pointer"
-                                        }}
-                                      >
-                                        {item.done ? <span style={{ color: "#fff", fontSize: 10, lineHeight: 1 }}>✓</span> : null}
-                                      </span>
+                                      <div style={{ display: "flex", gap: 4, flexShrink: 0, marginTop: 2 }}>
+                                        {renderPlanActionButton({
+                                          label: "✓",
+                                          active: item.done,
+                                          activeColor: "#22c55e",
+                                          title: item.done ? "取消完成" : "标记完成",
+                                          onClick: () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index })
+                                        })}
+                                        {renderPlanActionButton({
+                                          label: "×",
+                                          active: false,
+                                          activeColor: "#ef4444",
+                                          title: "未完成，平移到次日",
+                                          onClick: () => handleRolloverItem(task.id, day, index)
+                                        })}
+                                      </div>
                                       <div style={{ opacity: item.done ? 0.5 : 1 }}>
                                         {item.title ? <div style={{ fontWeight: 600, fontSize: 12, color: "#333", marginBottom: 2, textDecoration: item.done ? "line-through" : "none" }}>{item.title}</div> : null}
                                         {item.content ? <div className="cell-expanded-text" style={{ textDecoration: item.done ? "line-through" : "none" }}>{item.content}</div> : null}
@@ -910,17 +1047,30 @@ function App() {
                         const day = dateKey(date);
                         const items = getCellItems(task, day);
                         return (
-                          <div key={`${task.id}-${day}`} className={`daily-cell ${isToday(date) ? "today" : ""}`}>
+                          <div
+                            key={`${task.id}-${day}`}
+                            className={`daily-cell ${isToday(date) ? "today" : ""}`}
+                            onClick={() => {
+                              if (!items) {
+                                setEditCell({ taskId: task.id, day });
+                                setCellItems([{ title: "", content: "", done: false }]);
+                              }
+                            }}
+                          >
                             {items ? (
                               <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                                 {items.map((item, index) => (
                                   <div key={`${task.id}-${day}-silent-${index}`}>
-                                    {renderCompactPlanItem(item, () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }))}
+                                    {renderCompactPlanItem(
+                                      item,
+                                      () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }),
+                                      () => handleRolloverItem(task.id, day, index)
+                                    )}
                                   </div>
                                 ))}
                               </div>
                             ) : (
-                              <div className="daily-cell-empty daily-cell-empty-muted">·</div>
+                              <div className="daily-cell-empty daily-cell-empty-muted">+</div>
                             )}
                           </div>
                         );
@@ -933,7 +1083,7 @@ function App() {
 
             {filteredTasks.length === 0 ? <div className="empty-grid-state">暂无匹配任务，点击右上角“+ 新任务”添加</div> : null}
           </div>
-        </>
+        </div>
       )}
 
       {isMobile ? (
@@ -1048,15 +1198,43 @@ function App() {
         {data.archivedTasks.length === 0 ? (
           <div style={{ padding: 20, textAlign: "center", color: "#bbb" }}>暂无已完结任务</div>
         ) : (
-          <div style={{ maxHeight: "60vh", overflow: "auto" }}>
-            {sortTasks(data.archivedTasks).map((task) => (
+          <>
+            <div className="archive-toolbar">
+              <input
+                className="archive-search-input"
+                value={archiveQuery}
+                onChange={(event) => setArchiveQuery(event.target.value)}
+                placeholder="搜索已完成任务…"
+              />
+              <select className="archive-filter-select" value={archiveCategory} onChange={(event) => setArchiveCategory(event.target.value)}>
+                {["全部", ...data.categories].map((category) => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
+              <select className="archive-filter-select" value={archiveSort} onChange={(event) => setArchiveSort(event.target.value)}>
+                <option value="latest">最近归档</option>
+                <option value="earliest">最早归档</option>
+                <option value="category">按分类</option>
+              </select>
+            </div>
+            <div style={{ maxHeight: "60vh", overflow: "auto" }}>
+            {archiveTasks.length === 0 ? (
+              <div style={{ padding: 20, textAlign: "center", color: "#bbb" }}>没有匹配的已完成任务</div>
+            ) : archiveTasks.map((task) => (
               <div key={task.id} className="archive-item">
-                <div>
+                <div className="archive-main">
                   <div className="archive-name">{task.name}</div>
                   <div className="archive-meta">{task.category} · 归档于 {task.archivedAt ? new Date(task.archivedAt).toLocaleDateString() : ""}</div>
+                  <div className="archive-meta">
+                    {task.responsible ? `负责人：${task.responsible}` : "负责人：未填写"}
+                    {formatDeadline(task) ? ` · 截止：${formatDeadline(task)}` : ""}
+                  </div>
+                  {getLatestPlanSummary(task) ? <div className="archive-summary">最近计划：{getLatestPlanSummary(task)}</div> : null}
                 </div>
                 <div className="archive-actions">
+                  <button className="btn btn-outline" style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6 }} onClick={() => openArchiveDetail(task)}>历史计划</button>
                   <button className="btn btn-outline" style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6 }} onClick={() => dispatch({ type: "restoreTask", id: task.id })}>恢复</button>
+                  <button className="btn btn-outline" style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6 }} onClick={() => duplicateArchivedTask(task)}>复制</button>
                   <button
                     className="btn btn-danger"
                     style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6 }}
@@ -1077,8 +1255,43 @@ function App() {
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          </>
         )}
+      </Modal>
+
+      <Modal open={Boolean(archiveDetailTask)} onClose={() => setArchiveDetailTask(null)} title={archiveDetailTask ? `${archiveDetailTask.name} · 历史计划` : "历史计划"} width={520}>
+        {archiveDetailTask ? (
+          <>
+            <div className="archive-detail-meta">
+              <div><strong>分类：</strong>{archiveDetailTask.category}</div>
+              <div><strong>归档时间：</strong>{archiveDetailTask.archivedAt ? new Date(archiveDetailTask.archivedAt).toLocaleString() : "未记录"}</div>
+              <div><strong>截止日期：</strong>{formatDeadline(archiveDetailTask) || "未设置"}</div>
+            </div>
+            {getArchivePlanDays(archiveDetailTask).length === 0 ? (
+              <div style={{ padding: 20, textAlign: "center", color: "#bbb" }}>这个任务没有历史计划记录</div>
+            ) : (
+              <div className="archive-plan-list">
+                {getArchivePlanDays(archiveDetailTask).map(([day, items]) => (
+                  <div key={`${archiveDetailTask.id}-${day}`} className="archive-plan-day">
+                    <div className="archive-plan-day-label">{formatDateInput(day)}</div>
+                    <div className="archive-plan-items">
+                      {items.map((item, index) => (
+                        <div key={`${archiveDetailTask.id}-${day}-${index}`} className="archive-plan-item">
+                          <div className={`archive-plan-check ${item.done ? "done" : ""}`}>{item.done ? "✓" : ""}</div>
+                          <div className="archive-plan-copy">
+                            <div className={`archive-plan-title ${item.done ? "done" : ""}`}>{item.title || item.content.split("\n")[0]}</div>
+                            {item.title && item.content ? <div className={`archive-plan-detail ${item.done ? "done" : ""}`}>{item.content}</div> : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : null}
       </Modal>
 
       <Modal open={showSettings} onClose={() => setShowSettings(false)} title="设置" width={420}>
@@ -1173,30 +1386,24 @@ function App() {
   );
 }
 
-function renderCompactPlanItem(item, onToggle) {
+function renderCompactPlanItem(item, onToggle, onRollover) {
   const label = item.title || item.content.split("\n")[0];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-      <span
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggle();
-        }}
-        style={{
-          flexShrink: 0,
-          width: 14,
-          height: 14,
-          borderRadius: 3,
-          border: `1.5px solid ${item.done ? "#22c55e" : "#ccc"}`,
-          background: item.done ? "#22c55e" : "transparent",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "pointer"
-        }}
-      >
-        {item.done ? <span style={{ color: "#fff", fontSize: 10, lineHeight: 1 }}>✓</span> : null}
-      </span>
+      {renderPlanActionButton({
+        label: "✓",
+        active: item.done,
+        activeColor: "#22c55e",
+        title: item.done ? "取消完成" : "标记完成",
+        onClick: onToggle
+      })}
+      {renderPlanActionButton({
+        label: "×",
+        active: false,
+        activeColor: "#ef4444",
+        title: "未完成，平移到次日",
+        onClick: onRollover
+      })}
       <span
         style={{
           fontSize: 12,
@@ -1211,6 +1418,38 @@ function renderCompactPlanItem(item, onToggle) {
         {label}
       </span>
     </div>
+  );
+}
+
+function renderPlanActionButton({ label, active, activeColor, title, onClick }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      style={{
+        flexShrink: 0,
+        width: 14,
+        height: 14,
+        borderRadius: 3,
+        border: `1.5px solid ${active ? activeColor : "#ccc"}`,
+        background: active ? activeColor : "transparent",
+        color: active ? "#fff" : activeColor,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "pointer",
+        padding: 0,
+        fontSize: 10,
+        lineHeight: 1,
+        fontWeight: 700
+      }}
+    >
+      {active || label === "×" ? label : ""}
+    </button>
   );
 }
 

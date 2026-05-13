@@ -21882,20 +21882,29 @@
       }
     ) : null, task.deadlineMode === "none" ? /* @__PURE__ */ import_react.default.createElement("div", { className: "field-help" }, "\u4E0D\u8BBE\u7F6E\u622A\u6B62\u65F6\u95F4\u3002") : null);
   }
-  function renderMobilePlanItem(item, onToggle) {
+  function renderMobilePlanItem(item, onToggle, onRollover) {
     const label = item.title || item.content.split("\n")[0];
-    return /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-row" }, /* @__PURE__ */ import_react.default.createElement(
+    return /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-row" }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-actions" }, /* @__PURE__ */ import_react.default.createElement(
       "button",
       {
         type: "button",
         className: `mobile-plan-check ${item.done ? "done" : ""}`,
         onClick: onToggle,
-        "aria-label": item.done ? "mark undone" : "mark done"
+        "aria-label": item.done ? "\u53D6\u6D88\u5B8C\u6210" : "\u6807\u8BB0\u5B8C\u6210"
       },
       item.done ? "\u2713" : ""
-    ), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-copy" }, /* @__PURE__ */ import_react.default.createElement("div", { className: `mobile-plan-title ${item.done ? "done" : ""}` }, label), item.title && item.content ? /* @__PURE__ */ import_react.default.createElement("div", { className: `mobile-plan-detail ${item.done ? "done" : ""}` }, item.content) : null));
+    ), /* @__PURE__ */ import_react.default.createElement(
+      "button",
+      {
+        type: "button",
+        className: "mobile-plan-check missed",
+        onClick: onRollover,
+        "aria-label": "\u672A\u5B8C\u6210\uFF0C\u5E73\u79FB\u5230\u6B21\u65E5"
+      },
+      "\xD7"
+    )), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-copy" }, /* @__PURE__ */ import_react.default.createElement("div", { className: `mobile-plan-title ${item.done ? "done" : ""}` }, label), item.title && item.content ? /* @__PURE__ */ import_react.default.createElement("div", { className: `mobile-plan-detail ${item.done ? "done" : ""}` }, item.content) : null));
   }
-  function MobileTaskCard({ task, day, getItems, onToggleItemDone, onEditTask, onEditCell, setCellItems }) {
+  function MobileTaskCard({ task, day, getItems, onToggleItemDone, onRolloverItem, onEditTask, onEditCell, setCellItems }) {
     const items = getItems(task, day);
     const hasItems = items && items.length > 0;
     const deadline = formatDeadline(task);
@@ -21903,7 +21912,11 @@
       onEditCell({ taskId: task.id, day });
       setCellItems(hasItems ? items.map((item) => ({ ...item })) : [{ title: "", content: "", done: false }]);
     }
-    return /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-card", style: { borderLeftColor: catColor(task.category) } }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-header" }, /* @__PURE__ */ import_react.default.createElement("div", { style: { flex: 1, minWidth: 0 }, onClick: () => onEditTask({ ...task }) }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-name" }, task.name), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-meta-row" }, /* @__PURE__ */ import_react.default.createElement("span", { className: "mobile-task-meta-pill", style: { background: `${catColor(task.category)}12`, color: catColor(task.category) } }, task.category), deadline ? /* @__PURE__ */ import_react.default.createElement("span", { className: "mobile-task-meta-text" }, "\u622A\u6B62 ", deadline) : null)), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-quick-actions" }, /* @__PURE__ */ import_react.default.createElement("button", { className: "mobile-mini-btn", onClick: openPlanEditor }, hasItems ? "\u8BB0\u5F55\u8BA1\u5212" : "\u8BB0\u5F55\u4ECA\u65E5\u8BA1\u5212"), /* @__PURE__ */ import_react.default.createElement("button", { className: "mobile-mini-btn", onClick: () => onEditTask({ ...task }) }, "\u7F16\u8F91"))), hasItems ? /* @__PURE__ */ import_react.default.createElement(import_react.default.Fragment, null, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-divider" }), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-area" }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-label" }, "\u4ECA\u65E5\u8BA1\u5212"), items.map((item, index) => /* @__PURE__ */ import_react.default.createElement("div", { key: `${task.id}-${day}-${index}`, className: "mobile-plan-item", style: { borderBottom: index < items.length - 1 ? "1px solid #f5f5f5" : "none" } }, renderMobilePlanItem(item, () => onToggleItemDone(task.id, day, index)))))) : null);
+    return /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-card", style: { borderLeftColor: catColor(task.category) } }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-header" }, /* @__PURE__ */ import_react.default.createElement("div", { style: { flex: 1, minWidth: 0 }, onClick: () => onEditTask({ ...task }) }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-name" }, task.name), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-meta-row" }, /* @__PURE__ */ import_react.default.createElement("span", { className: "mobile-task-meta-pill", style: { background: `${catColor(task.category)}12`, color: catColor(task.category) } }, task.category), deadline ? /* @__PURE__ */ import_react.default.createElement("span", { className: "mobile-task-meta-text" }, "\u622A\u6B62 ", deadline) : null)), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-quick-actions" }, /* @__PURE__ */ import_react.default.createElement("button", { className: "mobile-mini-btn", onClick: openPlanEditor }, hasItems ? "\u8BB0\u5F55\u8BA1\u5212" : "\u8BB0\u5F55\u4ECA\u65E5\u8BA1\u5212"), /* @__PURE__ */ import_react.default.createElement("button", { className: "mobile-mini-btn", onClick: () => onEditTask({ ...task }) }, "\u7F16\u8F91"))), hasItems ? /* @__PURE__ */ import_react.default.createElement(import_react.default.Fragment, null, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-divider" }), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-area" }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-label" }, "\u4ECA\u65E5\u8BA1\u5212"), items.map((item, index) => /* @__PURE__ */ import_react.default.createElement("div", { key: `${task.id}-${day}-${index}`, className: "mobile-plan-item", style: { borderBottom: index < items.length - 1 ? "1px solid #f5f5f5" : "none" } }, renderMobilePlanItem(
+      item,
+      () => onToggleItemDone(task.id, day, index),
+      () => onRolloverItem(task.id, day, index)
+    ))))) : null);
   }
   function MobileView({
     data,
@@ -21916,6 +21929,7 @@
     setFilterCat,
     getCellItems: getCellItems2,
     onToggleItemDone,
+    onRolloverItem,
     onEditTask,
     onEditCell,
     setCellItems
@@ -21978,6 +21992,7 @@
         day: mobileDay,
         getItems: getCellItems2,
         onToggleItemDone,
+        onRolloverItem,
         onEditTask,
         onEditCell,
         setCellItems
@@ -22076,9 +22091,37 @@
             return { ...task, dailyActions: { ...task.dailyActions, [action.day]: nextItems } };
           })
         });
+      case "rolloverItem": {
+        const nextDay = getNextDayKey(action.day);
+        if (!nextDay) return state;
+        return updateTimestamp({
+          ...state,
+          tasks: state.tasks.map((task) => {
+            if (task.id !== action.taskId) return task;
+            const items = getCellItems(task, action.day);
+            if (!items || !items[action.index]) return task;
+            const itemToMove = { ...items[action.index], done: false };
+            const remainingItems = items.filter((_, index) => index !== action.index);
+            const nextDayItems = getCellItems(task, nextDay) || [];
+            const nextDailyActions = {
+              ...task.dailyActions,
+              [nextDay]: [...nextDayItems, itemToMove]
+            };
+            if (remainingItems.length) nextDailyActions[action.day] = remainingItems;
+            else delete nextDailyActions[action.day];
+            return { ...task, dailyActions: nextDailyActions };
+          })
+        });
+      }
       default:
         return state;
     }
+  }
+  function getNextDayKey(day) {
+    const date = /* @__PURE__ */ new Date(`${day}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return "";
+    date.setDate(date.getDate() + 1);
+    return dateKey(date);
   }
   function createToast(message, type = "success") {
     return { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), message, type };
@@ -22090,6 +22133,10 @@
     const [desktopVisibility, setDesktopVisibility] = (0, import_react2.useState)("active");
     const [showAdd, setShowAdd] = (0, import_react2.useState)(false);
     const [showArchive, setShowArchive] = (0, import_react2.useState)(false);
+    const [archiveQuery, setArchiveQuery] = (0, import_react2.useState)("");
+    const [archiveCategory, setArchiveCategory] = (0, import_react2.useState)("\u5168\u90E8");
+    const [archiveSort, setArchiveSort] = (0, import_react2.useState)("latest");
+    const [archiveDetailTask, setArchiveDetailTask] = (0, import_react2.useState)(null);
     const [showSettings, setShowSettings] = (0, import_react2.useState)(false);
     const [editTask, setEditTask] = (0, import_react2.useState)(null);
     const [editCell, setEditCell] = (0, import_react2.useState)(null);
@@ -22230,17 +22277,32 @@
     const query = searchQuery.trim().toLowerCase();
     const weekStart = dateKey(days[0]);
     const weekEnd = dateKey(days[6]);
-    function hasItemsThisWeek(task) {
-      return days.some((date) => Boolean(getCellItems(task, dateKey(date))));
+    function hasItemsAroundToday(task) {
+      const today = /* @__PURE__ */ new Date();
+      today.setHours(0, 0, 0, 0);
+      return [-1, 0, 1].some((offset) => {
+        const date = new Date(today);
+        date.setDate(today.getDate() + offset);
+        return Boolean(getCellItems(task, dateKey(date)));
+      });
     }
     function hasNearbyDeadline(task) {
       if (task.deadlineMode !== "date" || !task.deadlineDate) return false;
       return task.deadlineDate >= weekStart && task.deadlineDate <= weekEnd;
     }
+    function getLatestPlanSummary(task) {
+      const entries = Object.entries(task.dailyActions || {}).filter(([, items2]) => Array.isArray(items2) && items2.length).sort(([left], [right]) => right.localeCompare(left));
+      if (!entries.length) return "";
+      const [, items] = entries[0];
+      const first = items[0];
+      return first?.title || first?.content || "";
+    }
+    function getArchivePlanDays(task) {
+      return Object.entries(task.dailyActions || {}).filter(([, items]) => Array.isArray(items) && items.length).sort(([left], [right]) => right.localeCompare(left));
+    }
     function isActiveTask(task) {
-      if (hasItemsThisWeek(task)) return true;
+      if (hasItemsAroundToday(task)) return true;
       if (hasNearbyDeadline(task)) return true;
-      if (task.status === "\u8FDB\u884C\u4E2D" && task.priority === "\u9AD8") return true;
       return false;
     }
     const filteredTasks = sortTasks(
@@ -22265,6 +22327,21 @@
         return task.name.toLowerCase().includes(query) || task.responsible.toLowerCase().includes(query) || task.participants.toLowerCase().includes(query) || formatDeadline(task).toLowerCase().includes(query);
       })
     );
+    const archiveSearch = archiveQuery.trim().toLowerCase();
+    const archiveTasks = [...data.archivedTasks].filter((task) => {
+      if (archiveCategory !== "\u5168\u90E8" && task.category !== archiveCategory) return false;
+      if (!archiveSearch) return true;
+      return task.name.toLowerCase().includes(archiveSearch) || task.category.toLowerCase().includes(archiveSearch) || task.responsible.toLowerCase().includes(archiveSearch) || task.participants.toLowerCase().includes(archiveSearch) || formatDeadline(task).toLowerCase().includes(archiveSearch) || getLatestPlanSummary(task).toLowerCase().includes(archiveSearch);
+    }).sort((left, right) => {
+      if (archiveSort === "earliest") {
+        return new Date(left.archivedAt || 0).getTime() - new Date(right.archivedAt || 0).getTime();
+      }
+      if (archiveSort === "category") {
+        const categoryDiff = left.category.localeCompare(right.category, "zh-CN");
+        if (categoryDiff !== 0) return categoryDiff;
+      }
+      return new Date(right.archivedAt || 0).getTime() - new Date(left.archivedAt || 0).getTime();
+    });
     function askConfirm({ title, message, confirmLabel, confirmTone = "dark", onConfirm }) {
       setConfirmState({ title, message, confirmLabel, confirmTone, onConfirm });
     }
@@ -22351,6 +22428,25 @@
       }
       pushToast("\u5206\u7C7B\u5DF2\u5220\u9664\u5E76\u8FC1\u79FB\u4EFB\u52A1", "warning");
     }
+    function duplicateArchivedTask(task) {
+      const copiedTask = normalizeData({
+        categories: data.categories,
+        tasks: [{ ...task, id: genId(), status: "\u5F85\u542F\u52A8", archivedAt: void 0 }],
+        archivedTasks: []
+      }).tasks[0];
+      dispatch({
+        type: "replace",
+        data: {
+          ...data,
+          tasks: [...data.tasks, copiedTask]
+        }
+      });
+      setShowArchive(false);
+      pushToast("\u5DF2\u590D\u5236\u4E3A\u65B0\u4EFB\u52A1");
+    }
+    function openArchiveDetail(task) {
+      setArchiveDetailTask(task);
+    }
     function handleAddTask() {
       if (!newTask.name.trim()) {
         pushToast("\u4EFB\u52A1\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A", "warning");
@@ -22381,6 +22477,11 @@
       setEditCell(null);
       setCellItems([{ title: "", content: "", done: false }]);
       pushToast(validItems.length ? "\u8BA1\u5212\u5DF2\u4FDD\u5B58" : "\u8BA1\u5212\u5DF2\u6E05\u7A7A");
+    }
+    function handleRolloverItem(taskId, day, index) {
+      dispatch({ type: "rolloverItem", taskId, day, index });
+      setExpandedCell(null);
+      pushToast("\u672A\u5B8C\u6210\u8BA1\u5212\u5DF2\u5E73\u79FB\u5230\u6B21\u65E5", "warning");
     }
     function handleImportFile(event) {
       const file = event.target.files?.[0];
@@ -22567,7 +22668,7 @@
       todayColRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
     }
     const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
-    return /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, isWeChat ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "info-banner wechat" }, /* @__PURE__ */ import_react2.default.createElement("span", { style: { fontSize: 20 } }, "\u{1F4AC}"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("div", { style: { fontWeight: 600 } }, "\u8BF7\u5728\u5916\u90E8\u6D4F\u89C8\u5668\u4E2D\u6253\u5F00"), /* @__PURE__ */ import_react2.default.createElement("div", { style: { opacity: 0.9, fontSize: 12 } }, "\u70B9\u53F3\u4E0A\u89D2 \xB7\xB7\xB7 \u2192 \u9009\u62E9\u300C\u5728\u6D4F\u89C8\u5668\u6253\u5F00\u300D\uFF0C\u6570\u636E\u540C\u6B65\u624D\u80FD\u6B63\u5E38\u5DE5\u4F5C"))) : null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "header" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-top" }, /* @__PURE__ */ import_react2.default.createElement("h1", null, "\u{1F4CB} ", isMobile ? "\u5DE5\u4F5C\u7BA1\u7406" : "\u5218\u660A\u7684\u5DE5\u4F5C\u7BA1\u7406\u7CFB\u7EDF"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-actions" }, gistId ? /* @__PURE__ */ import_react2.default.createElement("span", { className: `sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}` }, "\u2601 ", syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u5931\u8D25" : "\u540C\u6B65\u4E2D") : null, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost", onClick: () => setShowSettings(true) }, "\u2699"), !isMobile ? /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost", onClick: () => setShowArchive(true) }, "\u5DF2\u5B8C\u7ED3") : null, isMobile ? /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost", onClick: () => setMobileDay(dateKey(/* @__PURE__ */ new Date())) }, "\u4ECA\u65E5") : null, !isMobile ? /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-primary", onClick: () => setShowAdd(true) }, "+ \u65B0\u4EFB\u52A1") : null)), !isMobile ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "week-nav" }, /* @__PURE__ */ import_react2.default.createElement("button", { onClick: () => setWeekOffset((current) => current - 1) }, "\u2039"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "week-info" }, fmtDate(days[0]), " - ", fmtDate(days[6]), weekOffset === 0 ? /* @__PURE__ */ import_react2.default.createElement("span", { className: "badge-week" }, "\u672C\u5468") : null), /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn-today", onClick: scrollToToday }, "\u4ECA\u65E5"), /* @__PURE__ */ import_react2.default.createElement("button", { onClick: () => setWeekOffset((current) => current + 1) }, "\u203A"))) : null), remoteUpdate ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "sync-banner" }, /* @__PURE__ */ import_react2.default.createElement("span", null, "\u2601\uFE0F \u4E91\u7AEF\u53D1\u73B0\u65B0\u7248\u672C\uFF08", new Date(remoteUpdate._lastModified).toLocaleTimeString(), "\uFF09\u3002\u5148\u51B3\u5B9A\u4FDD\u7559\u672C\u5730\u8FD8\u662F\u4F7F\u7528\u4E91\u7AEF\uFF0C\u907F\u514D\u76F4\u63A5\u4E92\u76F8\u8986\u76D6\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "sync-banner-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: keepLocalVersion }, "\u4FDD\u7559\u672C\u5730"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", onClick: useCloudVersion }, "\u4F7F\u7528\u4E91\u7AEF"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => setRemoteUpdate(null) }, "\u7A0D\u540E\u5904\u7406"))) : null, isMobile ? /* @__PURE__ */ import_react2.default.createElement(
+    return /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, isWeChat ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "info-banner wechat" }, /* @__PURE__ */ import_react2.default.createElement("span", { style: { fontSize: 20 } }, "\u{1F4AC}"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("div", { style: { fontWeight: 600 } }, "\u8BF7\u5728\u5916\u90E8\u6D4F\u89C8\u5668\u4E2D\u6253\u5F00"), /* @__PURE__ */ import_react2.default.createElement("div", { style: { opacity: 0.9, fontSize: 12 } }, "\u70B9\u53F3\u4E0A\u89D2 \xB7\xB7\xB7 \u2192 \u9009\u62E9\u300C\u5728\u6D4F\u89C8\u5668\u6253\u5F00\u300D\uFF0C\u6570\u636E\u540C\u6B65\u624D\u80FD\u6B63\u5E38\u5DE5\u4F5C"))) : null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "header" }, isMobile ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-top" }, /* @__PURE__ */ import_react2.default.createElement("h1", null, "\u{1F4CB} \u5DE5\u4F5C\u7BA1\u7406"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-actions" }, gistId ? /* @__PURE__ */ import_react2.default.createElement("span", { className: `sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}` }, "\u2601 ", syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u5931\u8D25" : "\u540C\u6B65\u4E2D") : null, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost", onClick: () => setShowSettings(true) }, "\u2699"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost", onClick: () => setMobileDay(dateKey(/* @__PURE__ */ new Date())) }, "\u4ECA\u65E5"))) : /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-desktop" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-brand" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-brand-mark" }, /* @__PURE__ */ import_react2.default.createElement("img", { src: "./assets/jiangsu-wenchuang-mark.png", alt: "\u6C5F\u82CF\u6587\u521B", className: "header-brand-logo" })), /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-brand-copy" }, /* @__PURE__ */ import_react2.default.createElement("h1", null, "\u5218\u660A\u7684\u5DE5\u4F5C\u53F0"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-center" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "week-nav" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "week-nav-arrow", onClick: () => setWeekOffset((current) => current - 1) }, "\u2039"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "week-nav-core" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "week-info" }, fmtDate(days[0]), " - ", fmtDate(days[6])), weekOffset === 0 ? /* @__PURE__ */ import_react2.default.createElement("span", { className: "badge-week" }, "\u672C\u5468") : null, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn-today", onClick: scrollToToday }, "\u4ECA\u65E5")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "week-nav-arrow", onClick: () => setWeekOffset((current) => current + 1) }, "\u203A"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-actions" }, gistId ? /* @__PURE__ */ import_react2.default.createElement("span", { className: `sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}` }, "\u2601 ", syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u5931\u8D25" : "\u540C\u6B65\u4E2D") : null, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost", onClick: () => setShowArchive(true) }, "\u5DF2\u5B8C\u7ED3"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost btn-icon", onClick: () => setShowSettings(true) }, "\u2699"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-primary", onClick: () => setShowAdd(true) }, "+ \u65B0\u4EFB\u52A1")))), remoteUpdate ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "sync-banner" }, /* @__PURE__ */ import_react2.default.createElement("span", null, "\u2601\uFE0F \u4E91\u7AEF\u53D1\u73B0\u65B0\u7248\u672C\uFF08", new Date(remoteUpdate._lastModified).toLocaleTimeString(), "\uFF09\u3002\u5148\u51B3\u5B9A\u4FDD\u7559\u672C\u5730\u8FD8\u662F\u4F7F\u7528\u4E91\u7AEF\uFF0C\u907F\u514D\u76F4\u63A5\u4E92\u76F8\u8986\u76D6\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "sync-banner-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: keepLocalVersion }, "\u4FDD\u7559\u672C\u5730"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", onClick: useCloudVersion }, "\u4F7F\u7528\u4E91\u7AEF"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => setRemoteUpdate(null) }, "\u7A0D\u540E\u5904\u7406"))) : null, isMobile ? /* @__PURE__ */ import_react2.default.createElement(
       MobileView,
       {
         data: mobileTasks,
@@ -22580,11 +22681,12 @@
         setFilterCat,
         getCellItems,
         onToggleItemDone: (taskId, day, index) => dispatch({ type: "toggleItemDone", taskId, day, index }),
+        onRolloverItem: handleRolloverItem,
         onEditTask: setEditTask,
         onEditCell: setEditCell,
         setCellItems
       }
-    ) : /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "filter-bar" }, ["\u5168\u90E8", ...data.categories].map((category) => /* @__PURE__ */ import_react2.default.createElement(
+    ) : /* @__PURE__ */ import_react2.default.createElement("div", { className: "desktop-shell" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "filter-bar" }, ["\u5168\u90E8", ...data.categories].map((category) => /* @__PURE__ */ import_react2.default.createElement(
       "button",
       {
         key: category,
@@ -22593,7 +22695,7 @@
         onClick: () => setFilterCat(category)
       },
       category
-    )), /* @__PURE__ */ import_react2.default.createElement("div", { className: "desktop-visibility-switch" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: `filter-btn ${desktopVisibility === "active" ? "active" : ""}`, onClick: () => setDesktopVisibility("active") }, "\u4EC5\u6D3B\u8DC3"), /* @__PURE__ */ import_react2.default.createElement("button", { className: `filter-btn ${desktopVisibility === "all" ? "active" : ""}`, onClick: () => setDesktopVisibility("all") }, "\u542B\u9759\u9ED8")), /* @__PURE__ */ import_react2.default.createElement("div", { style: { marginLeft: "auto", flexShrink: 0 } }, /* @__PURE__ */ import_react2.default.createElement("input", { className: "search-input", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "\u{1F50D} \u641C\u7D22\u4EFB\u52A1\u2026" }))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "main-area" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-header-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "corner-cell" }, "\u4E8B\u9879 (", filteredTasks.length, ")"), days.map((date) => /* @__PURE__ */ import_react2.default.createElement("div", { key: date.toISOString(), ref: isToday(date) ? todayColRef : null, className: `day-cell ${isToday(date) ? "today" : ""}` }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-label" }, dayLabel(date)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-num" }, date.getDate())))), desktopSections.map(({ category, activeTasks, silentTasks, total }) => /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, { key: category }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "grid-container" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "cat-header", style: { background: `${catColor(category)}12`, borderLeft: `3px solid ${catColor(category)}`, color: catColor(category) } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "cat-header-row" }, /* @__PURE__ */ import_react2.default.createElement("span", null, category, "\uFF08", total, "\uFF09"), silentTasks.length ? /* @__PURE__ */ import_react2.default.createElement("button", { className: "cat-toggle-btn", onClick: () => toggleSilentCategory(category) }, collapsedCategories[category] !== false ? `\u5C55\u5F00\u9759\u9ED8\u4EFB\u52A1\uFF08${silentTasks.length}\uFF09` : `\u6536\u8D77\u9759\u9ED8\u4EFB\u52A1\uFF08${silentTasks.length}\uFF09`) : null))), activeTasks.map((task) => /* @__PURE__ */ import_react2.default.createElement("div", { key: task.id, className: "task-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-info", style: { borderLeftColor: catColor(task.category) }, onClick: () => setEditTask({ ...task }) }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-name" }, task.name), /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-meta" }, /* @__PURE__ */ import_react2.default.createElement(PBadge, { priority: task.priority, small: true }), /* @__PURE__ */ import_react2.default.createElement(SBadge, { status: task.status, small: true }), formatDeadline(task) ? /* @__PURE__ */ import_react2.default.createElement("span", { className: "badge-deadline" }, "\u622A\u6B62:", formatDeadline(task)) : null), task.responsible ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-people" }, task.responsible, task.participants ? ` \xB7 ${task.participants}` : "") : null), days.map((date) => {
+    )), /* @__PURE__ */ import_react2.default.createElement("div", { className: "desktop-visibility-switch" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: `filter-btn visibility-toggle-btn ${desktopVisibility === "active" ? "active" : ""}`, onClick: () => setDesktopVisibility("active") }, "\u4EC5\u6D3B\u8DC3"), /* @__PURE__ */ import_react2.default.createElement("button", { className: `filter-btn visibility-toggle-btn ${desktopVisibility === "all" ? "active" : ""}`, onClick: () => setDesktopVisibility("all") }, "\u542B\u9759\u9ED8")), /* @__PURE__ */ import_react2.default.createElement("div", { className: "filter-search-wrap" }, /* @__PURE__ */ import_react2.default.createElement("input", { className: "search-input", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "\u{1F50D} \u641C\u7D22\u4EFB\u52A1\u2026" }))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "main-area" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-header-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "corner-cell" }, "\u4E8B\u9879 (", filteredTasks.length, ")"), days.map((date) => /* @__PURE__ */ import_react2.default.createElement("div", { key: date.toISOString(), ref: isToday(date) ? todayColRef : null, className: `day-cell ${isToday(date) ? "today" : ""}` }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-label" }, dayLabel(date)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-num" }, date.getDate())))), desktopSections.map(({ category, activeTasks, silentTasks, total }) => /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, { key: category }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "grid-container" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "cat-header", style: { background: `${catColor(category)}12`, borderLeft: `3px solid ${catColor(category)}`, color: catColor(category) } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "cat-header-row" }, /* @__PURE__ */ import_react2.default.createElement("span", null, category, "\uFF08", total, "\uFF09"), silentTasks.length ? /* @__PURE__ */ import_react2.default.createElement("button", { className: "cat-toggle-btn", onClick: () => toggleSilentCategory(category) }, collapsedCategories[category] !== false ? `\u5C55\u5F00\u9759\u9ED8\u4EFB\u52A1\uFF08${silentTasks.length}\uFF09` : `\u6536\u8D77\u9759\u9ED8\u4EFB\u52A1\uFF08${silentTasks.length}\uFF09`) : null))), activeTasks.map((task) => /* @__PURE__ */ import_react2.default.createElement("div", { key: task.id, className: "task-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-info", style: { borderLeftColor: catColor(task.category) }, onClick: () => setEditTask({ ...task }) }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-name" }, task.name), /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-meta" }, /* @__PURE__ */ import_react2.default.createElement(PBadge, { priority: task.priority, small: true }), /* @__PURE__ */ import_react2.default.createElement(SBadge, { status: task.status, small: true }), formatDeadline(task) ? /* @__PURE__ */ import_react2.default.createElement("span", { className: "badge-deadline" }, "\u622A\u6B62:", formatDeadline(task)) : null), task.responsible ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-people" }, task.responsible, task.participants ? ` \xB7 ${task.participants}` : "") : null), days.map((date) => {
       const day = dateKey(date);
       const items = getCellItems(task, day);
       const expandedKey = `${task.id}-${day}`;
@@ -22614,26 +22716,23 @@
             }
           }
         },
-        items ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, !isExpanded ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3 } }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${expandedKey}-${index}` }, renderCompactPlanItem(item, () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }))))) : /* @__PURE__ */ import_react2.default.createElement("div", { className: "cell-expanded", onClick: (event) => event.stopPropagation() }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${expandedKey}-full-${index}`, style: { display: "flex", alignItems: "flex-start", gap: 6, marginBottom: index < items.length - 1 ? 10 : 0 } }, /* @__PURE__ */ import_react2.default.createElement(
-          "span",
-          {
-            onClick: () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }),
-            style: {
-              flexShrink: 0,
-              marginTop: 2,
-              width: 14,
-              height: 14,
-              borderRadius: 3,
-              border: `1.5px solid ${item.done ? "#22c55e" : "#ccc"}`,
-              background: item.done ? "#22c55e" : "transparent",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer"
-            }
-          },
-          item.done ? /* @__PURE__ */ import_react2.default.createElement("span", { style: { color: "#fff", fontSize: 10, lineHeight: 1 } }, "\u2713") : null
-        ), /* @__PURE__ */ import_react2.default.createElement("div", { style: { opacity: item.done ? 0.5 : 1 } }, item.title ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { fontWeight: 600, fontSize: 12, color: "#333", marginBottom: 2, textDecoration: item.done ? "line-through" : "none" } }, item.title) : null, item.content ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "cell-expanded-text", style: { textDecoration: item.done ? "line-through" : "none" } }, item.content) : null))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "cell-expanded-actions" }, /* @__PURE__ */ import_react2.default.createElement(
+        items ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, !isExpanded ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3 } }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${expandedKey}-${index}` }, renderCompactPlanItem(
+          item,
+          () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }),
+          () => handleRolloverItem(task.id, day, index)
+        )))) : /* @__PURE__ */ import_react2.default.createElement("div", { className: "cell-expanded", onClick: (event) => event.stopPropagation() }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${expandedKey}-full-${index}`, style: { display: "flex", alignItems: "flex-start", gap: 6, marginBottom: index < items.length - 1 ? 10 : 0 } }, /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", gap: 4, flexShrink: 0, marginTop: 2 } }, renderPlanActionButton({
+          label: "\u2713",
+          active: item.done,
+          activeColor: "#22c55e",
+          title: item.done ? "\u53D6\u6D88\u5B8C\u6210" : "\u6807\u8BB0\u5B8C\u6210",
+          onClick: () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index })
+        }), renderPlanActionButton({
+          label: "\xD7",
+          active: false,
+          activeColor: "#ef4444",
+          title: "\u672A\u5B8C\u6210\uFF0C\u5E73\u79FB\u5230\u6B21\u65E5",
+          onClick: () => handleRolloverItem(task.id, day, index)
+        })), /* @__PURE__ */ import_react2.default.createElement("div", { style: { opacity: item.done ? 0.5 : 1 } }, item.title ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { fontWeight: 600, fontSize: 12, color: "#333", marginBottom: 2, textDecoration: item.done ? "line-through" : "none" } }, item.title) : null, item.content ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "cell-expanded-text", style: { textDecoration: item.done ? "line-through" : "none" } }, item.content) : null))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "cell-expanded-actions" }, /* @__PURE__ */ import_react2.default.createElement(
           "button",
           {
             className: "btn btn-outline",
@@ -22650,7 +22749,24 @@
     }))), (desktopVisibility === "all" || query) && (query || collapsedCategories[category] === false) ? silentTasks.map((task) => /* @__PURE__ */ import_react2.default.createElement("div", { key: task.id, className: "task-row task-row-muted" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-info task-info-muted", style: { borderLeftColor: catColor(task.category) }, onClick: () => setEditTask({ ...task }) }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-name" }, task.name), /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-meta" }, /* @__PURE__ */ import_react2.default.createElement(PBadge, { priority: task.priority, small: true }), /* @__PURE__ */ import_react2.default.createElement(SBadge, { status: task.status, small: true }), formatDeadline(task) ? /* @__PURE__ */ import_react2.default.createElement("span", { className: "badge-deadline" }, "\u622A\u6B62:", formatDeadline(task)) : null), task.responsible ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-people" }, task.responsible, task.participants ? ` \xB7 ${task.participants}` : "") : null), days.map((date) => {
       const day = dateKey(date);
       const items = getCellItems(task, day);
-      return /* @__PURE__ */ import_react2.default.createElement("div", { key: `${task.id}-${day}`, className: `daily-cell ${isToday(date) ? "today" : ""}` }, items ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3 } }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${task.id}-${day}-silent-${index}` }, renderCompactPlanItem(item, () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }))))) : /* @__PURE__ */ import_react2.default.createElement("div", { className: "daily-cell-empty daily-cell-empty-muted" }, "\xB7"));
+      return /* @__PURE__ */ import_react2.default.createElement(
+        "div",
+        {
+          key: `${task.id}-${day}`,
+          className: `daily-cell ${isToday(date) ? "today" : ""}`,
+          onClick: () => {
+            if (!items) {
+              setEditCell({ taskId: task.id, day });
+              setCellItems([{ title: "", content: "", done: false }]);
+            }
+          }
+        },
+        items ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3 } }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${task.id}-${day}-silent-${index}` }, renderCompactPlanItem(
+          item,
+          () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }),
+          () => handleRolloverItem(task.id, day, index)
+        )))) : /* @__PURE__ */ import_react2.default.createElement("div", { className: "daily-cell-empty daily-cell-empty-muted" }, "+")
+      );
     }))) : null)), filteredTasks.length === 0 ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "empty-grid-state" }, "\u6682\u65E0\u5339\u914D\u4EFB\u52A1\uFF0C\u70B9\u51FB\u53F3\u4E0A\u89D2\u201C+ \u65B0\u4EFB\u52A1\u201D\u6DFB\u52A0") : null)), isMobile ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "mobile-bottom-bar" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn", onClick: () => setMobileDay(dateKey(/* @__PURE__ */ new Date())) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\u25C9"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u4ECA\u5929")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn", onClick: () => setShowArchive(true) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\u2713"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u5F52\u6863")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn mobile-bottom-btn-primary", onClick: () => setShowAdd(true) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\uFF0B"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u65B0\u4EFB\u52A1")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn", onClick: () => setShowSettings(true) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\u2699"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u8BBE\u7F6E"))) : null, /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showAdd, onClose: () => setShowAdd(false), title: "\u6DFB\u52A0\u65B0\u4EFB\u52A1" }, /* @__PURE__ */ import_react2.default.createElement(TaskForm, { task: newTask, setTask: setNewTask, categories: data.categories }), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark btn-block", onClick: handleAddTask }, "\u6DFB\u52A0")), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: Boolean(editTask), onClose: () => setEditTask(null), title: "\u7F16\u8F91\u4EFB\u52A1" }, editTask ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement(TaskForm, { task: editTask, setTask: setEditTask, categories: data.categories }), /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", gap: 10, marginTop: 10 } }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", style: { flex: 1, padding: 11, borderRadius: 10, fontSize: 14 }, onClick: handleSaveTaskEdit }, "\u4FDD\u5B58"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-success", style: { padding: "11px 16px", borderRadius: 10, fontSize: 14 }, onClick: () => dispatch({ type: "archiveTask", id: editTask.id }) }, "\u5B8C\u7ED3\u5F52\u6863"), /* @__PURE__ */ import_react2.default.createElement(
       "button",
       {
@@ -22704,7 +22820,15 @@
         }
       },
       "\u6E05\u9664"
-    ))) : null), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showArchive, onClose: () => setShowArchive(false), title: `\u5DF2\u5B8C\u7ED3\u4EFB\u52A1 (${data.archivedTasks.length})`, width: 440 }, data.archivedTasks.length === 0 ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { padding: 20, textAlign: "center", color: "#bbb" } }, "\u6682\u65E0\u5DF2\u5B8C\u7ED3\u4EFB\u52A1") : /* @__PURE__ */ import_react2.default.createElement("div", { style: { maxHeight: "60vh", overflow: "auto" } }, sortTasks(data.archivedTasks).map((task) => /* @__PURE__ */ import_react2.default.createElement("div", { key: task.id, className: "archive-item" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-name" }, task.name), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-meta" }, task.category, " \xB7 \u5F52\u6863\u4E8E ", task.archivedAt ? new Date(task.archivedAt).toLocaleDateString() : "")), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", style: { fontSize: 12, padding: "4px 10px", borderRadius: 6 }, onClick: () => dispatch({ type: "restoreTask", id: task.id }) }, "\u6062\u590D"), /* @__PURE__ */ import_react2.default.createElement(
+    ))) : null), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showArchive, onClose: () => setShowArchive(false), title: `\u5DF2\u5B8C\u7ED3\u4EFB\u52A1 (${data.archivedTasks.length})`, width: 440 }, data.archivedTasks.length === 0 ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { padding: 20, textAlign: "center", color: "#bbb" } }, "\u6682\u65E0\u5DF2\u5B8C\u7ED3\u4EFB\u52A1") : /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-toolbar" }, /* @__PURE__ */ import_react2.default.createElement(
+      "input",
+      {
+        className: "archive-search-input",
+        value: archiveQuery,
+        onChange: (event) => setArchiveQuery(event.target.value),
+        placeholder: "\u641C\u7D22\u5DF2\u5B8C\u6210\u4EFB\u52A1\u2026"
+      }
+    ), /* @__PURE__ */ import_react2.default.createElement("select", { className: "archive-filter-select", value: archiveCategory, onChange: (event) => setArchiveCategory(event.target.value) }, ["\u5168\u90E8", ...data.categories].map((category) => /* @__PURE__ */ import_react2.default.createElement("option", { key: category, value: category }, category))), /* @__PURE__ */ import_react2.default.createElement("select", { className: "archive-filter-select", value: archiveSort, onChange: (event) => setArchiveSort(event.target.value) }, /* @__PURE__ */ import_react2.default.createElement("option", { value: "latest" }, "\u6700\u8FD1\u5F52\u6863"), /* @__PURE__ */ import_react2.default.createElement("option", { value: "earliest" }, "\u6700\u65E9\u5F52\u6863"), /* @__PURE__ */ import_react2.default.createElement("option", { value: "category" }, "\u6309\u5206\u7C7B"))), /* @__PURE__ */ import_react2.default.createElement("div", { style: { maxHeight: "60vh", overflow: "auto" } }, archiveTasks.length === 0 ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { padding: 20, textAlign: "center", color: "#bbb" } }, "\u6CA1\u6709\u5339\u914D\u7684\u5DF2\u5B8C\u6210\u4EFB\u52A1") : archiveTasks.map((task) => /* @__PURE__ */ import_react2.default.createElement("div", { key: task.id, className: "archive-item" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-main" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-name" }, task.name), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-meta" }, task.category, " \xB7 \u5F52\u6863\u4E8E ", task.archivedAt ? new Date(task.archivedAt).toLocaleDateString() : ""), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-meta" }, task.responsible ? `\u8D1F\u8D23\u4EBA\uFF1A${task.responsible}` : "\u8D1F\u8D23\u4EBA\uFF1A\u672A\u586B\u5199", formatDeadline(task) ? ` \xB7 \u622A\u6B62\uFF1A${formatDeadline(task)}` : ""), getLatestPlanSummary(task) ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-summary" }, "\u6700\u8FD1\u8BA1\u5212\uFF1A", getLatestPlanSummary(task)) : null), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", style: { fontSize: 12, padding: "4px 10px", borderRadius: 6 }, onClick: () => openArchiveDetail(task) }, "\u5386\u53F2\u8BA1\u5212"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", style: { fontSize: 12, padding: "4px 10px", borderRadius: 6 }, onClick: () => dispatch({ type: "restoreTask", id: task.id }) }, "\u6062\u590D"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", style: { fontSize: 12, padding: "4px 10px", borderRadius: 6 }, onClick: () => duplicateArchivedTask(task) }, "\u590D\u5236"), /* @__PURE__ */ import_react2.default.createElement(
       "button",
       {
         className: "btn btn-danger",
@@ -22722,7 +22846,7 @@
         })
       },
       "\u5220\u9664"
-    )))))), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showSettings, onClose: () => setShowSettings(false), title: "\u8BBE\u7F6E", width: 420 }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section", style: { marginTop: 0, paddingTop: 0, borderTop: "none" } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u2601\uFE0F \u670D\u52A1\u7AEF\u540C\u6B65"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u65B9\u5F0F\uFF1A"), "Alibaba Cloud API + MySQL"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F53\u524D\u5DE5\u4F5C\u7A7A\u95F4\uFF1A"), gistId), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u72B6\u6001\uFF1A"), syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u8FDE\u63A5\u5931\u8D25" : "\u540C\u6B65\u4E2D")), /* @__PURE__ */ import_react2.default.createElement("p", { className: "settings-note", style: { marginTop: 10 } }, "\u5F53\u524D\u7248\u672C\u4EE5\u670D\u52A1\u7AEF\u6570\u636E\u5E93\u4F5C\u4E3A\u552F\u4E00\u771F\u5B9E\u6570\u636E\u6E90\u3002\u672C\u5730 localStorage \u7EE7\u7EED\u4FDD\u7559\u7528\u4E8E\u7F13\u5B58\u548C\u5907\u4EFD\uFF0C\u4E0D\u518D\u4F7F\u7528 GitHub Gist \u4F5C\u4E3A\u4E3B\u540C\u6B65\u65B9\u5F0F\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: pullFromCloud }, "\u2193 \u4ECE\u670D\u52A1\u7AEF\u5237\u65B0"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u6570\u636E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-primary", onClick: exportData }, "\u{1F4E4} \u5BFC\u51FA"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => fileRef.current?.click() }, "\u{1F4E5} \u5BFC\u5165"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: resetDataWithBackup }, "\u{1F5D1} \u91CD\u7F6E"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u5907\u4EFD"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, backupInfo ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u6700\u8FD1\u5907\u4EFD\uFF1A"), new Date(backupInfo.savedAt).toLocaleString()), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u539F\u56E0\uFF1A"), backupInfo.reason)) : /* @__PURE__ */ import_react2.default.createElement("div", null, "\u5F53\u524D\u6CA1\u6709\u672C\u5730\u5907\u4EFD\u3002")), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: restoreBackup }, "\u6062\u590D\u6700\u8FD1\u5907\u4EFD"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u5206\u7C7B\u7BA1\u7406"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "settings-note" }, "\u5206\u7C7B\u987A\u5E8F\u4F1A\u540C\u6B65\u5230\u9876\u90E8\u6807\u7B7E\u680F\u548C\u65B0\u589E\u4EFB\u52A1\u8868\u5355\u3002\u5220\u9664\u5206\u7C7B\u65F6\uFF0C\u7CFB\u7EDF\u4F1A\u5148\u8981\u6C42\u4F60\u628A\u73B0\u6709\u4EFB\u52A1\u8FC1\u79FB\u5230\u5176\u4ED6\u5206\u7C7B\uFF0C\u4E0D\u4F1A\u76F4\u63A5\u4E22\u5931\u4EFB\u52A1\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-list" }, data.categories.map((category, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: category, className: "category-admin-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-name" }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "category-admin-dot", style: { background: catColor(category) } }), /* @__PURE__ */ import_react2.default.createElement("span", null, category)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => moveCategory(category, -1), disabled: index === 0 }, "\u4E0A\u79FB"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => moveCategory(category, 1), disabled: index === data.categories.length - 1 }, "\u4E0B\u79FB"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => renameCategory(category) }, "\u91CD\u547D\u540D"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: () => removeCategory(category) }, "\u5220\u9664"))))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", onClick: addCategory }, "\u65B0\u589E\u5206\u7C7B"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u4F7F\u7528\u8BF4\u660E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "settings-note" }, /* @__PURE__ */ import_react2.default.createElement("p", null, "1. \u6570\u636E\u4F1A\u4F18\u5148\u5199\u5165\u670D\u52A1\u7AEF\uFF0C\u518D\u540C\u6B65\u5230\u5176\u4ED6\u8BBE\u5907\uFF0C\u8DE8\u7AEF\u4E00\u81F4\u6027\u4F1A\u6BD4 Gist \u65B9\u6848\u7A33\u5B9A\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "2. \u5982\u679C\u5176\u4ED6\u8BBE\u5907\u5DF2\u7ECF\u5199\u5165\u4E86\u65B0\u7248\u672C\uFF0C\u9876\u90E8\u4ECD\u4F1A\u63D0\u793A\u4F60\u51B3\u5B9A\u4FDD\u7559\u672C\u5730\u8FD8\u662F\u91C7\u7528\u670D\u52A1\u7AEF\u7248\u672C\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "3. \u5BFC\u5165\u3001\u91CD\u7F6E\u3001\u8986\u76D6\u670D\u52A1\u7AEF\u7248\u672C\u4E4B\u524D\uFF0C\u7CFB\u7EDF\u4ECD\u4F1A\u81EA\u52A8\u4FDD\u7559\u4E00\u4EFD\u672C\u5730\u5907\u4EFD\u3002")))), /* @__PURE__ */ import_react2.default.createElement(
+    ))))))), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: Boolean(archiveDetailTask), onClose: () => setArchiveDetailTask(null), title: archiveDetailTask ? `${archiveDetailTask.name} \xB7 \u5386\u53F2\u8BA1\u5212` : "\u5386\u53F2\u8BA1\u5212", width: 520 }, archiveDetailTask ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-detail-meta" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5206\u7C7B\uFF1A"), archiveDetailTask.category), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F52\u6863\u65F6\u95F4\uFF1A"), archiveDetailTask.archivedAt ? new Date(archiveDetailTask.archivedAt).toLocaleString() : "\u672A\u8BB0\u5F55"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u622A\u6B62\u65E5\u671F\uFF1A"), formatDeadline(archiveDetailTask) || "\u672A\u8BBE\u7F6E")), getArchivePlanDays(archiveDetailTask).length === 0 ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { padding: 20, textAlign: "center", color: "#bbb" } }, "\u8FD9\u4E2A\u4EFB\u52A1\u6CA1\u6709\u5386\u53F2\u8BA1\u5212\u8BB0\u5F55") : /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-list" }, getArchivePlanDays(archiveDetailTask).map(([day, items]) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${archiveDetailTask.id}-${day}`, className: "archive-plan-day" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-day-label" }, formatDateInput(day)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-items" }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${archiveDetailTask.id}-${day}-${index}`, className: "archive-plan-item" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-check ${item.done ? "done" : ""}` }, item.done ? "\u2713" : ""), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-copy" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-title ${item.done ? "done" : ""}` }, item.title || item.content.split("\n")[0]), item.title && item.content ? /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-detail ${item.done ? "done" : ""}` }, item.content) : null)))))))) : null), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showSettings, onClose: () => setShowSettings(false), title: "\u8BBE\u7F6E", width: 420 }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section", style: { marginTop: 0, paddingTop: 0, borderTop: "none" } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u2601\uFE0F \u670D\u52A1\u7AEF\u540C\u6B65"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u65B9\u5F0F\uFF1A"), "Alibaba Cloud API + MySQL"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F53\u524D\u5DE5\u4F5C\u7A7A\u95F4\uFF1A"), gistId), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u72B6\u6001\uFF1A"), syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u8FDE\u63A5\u5931\u8D25" : "\u540C\u6B65\u4E2D")), /* @__PURE__ */ import_react2.default.createElement("p", { className: "settings-note", style: { marginTop: 10 } }, "\u5F53\u524D\u7248\u672C\u4EE5\u670D\u52A1\u7AEF\u6570\u636E\u5E93\u4F5C\u4E3A\u552F\u4E00\u771F\u5B9E\u6570\u636E\u6E90\u3002\u672C\u5730 localStorage \u7EE7\u7EED\u4FDD\u7559\u7528\u4E8E\u7F13\u5B58\u548C\u5907\u4EFD\uFF0C\u4E0D\u518D\u4F7F\u7528 GitHub Gist \u4F5C\u4E3A\u4E3B\u540C\u6B65\u65B9\u5F0F\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: pullFromCloud }, "\u2193 \u4ECE\u670D\u52A1\u7AEF\u5237\u65B0"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u6570\u636E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-primary", onClick: exportData }, "\u{1F4E4} \u5BFC\u51FA"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => fileRef.current?.click() }, "\u{1F4E5} \u5BFC\u5165"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: resetDataWithBackup }, "\u{1F5D1} \u91CD\u7F6E"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u5907\u4EFD"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, backupInfo ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u6700\u8FD1\u5907\u4EFD\uFF1A"), new Date(backupInfo.savedAt).toLocaleString()), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u539F\u56E0\uFF1A"), backupInfo.reason)) : /* @__PURE__ */ import_react2.default.createElement("div", null, "\u5F53\u524D\u6CA1\u6709\u672C\u5730\u5907\u4EFD\u3002")), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: restoreBackup }, "\u6062\u590D\u6700\u8FD1\u5907\u4EFD"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u5206\u7C7B\u7BA1\u7406"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "settings-note" }, "\u5206\u7C7B\u987A\u5E8F\u4F1A\u540C\u6B65\u5230\u9876\u90E8\u6807\u7B7E\u680F\u548C\u65B0\u589E\u4EFB\u52A1\u8868\u5355\u3002\u5220\u9664\u5206\u7C7B\u65F6\uFF0C\u7CFB\u7EDF\u4F1A\u5148\u8981\u6C42\u4F60\u628A\u73B0\u6709\u4EFB\u52A1\u8FC1\u79FB\u5230\u5176\u4ED6\u5206\u7C7B\uFF0C\u4E0D\u4F1A\u76F4\u63A5\u4E22\u5931\u4EFB\u52A1\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-list" }, data.categories.map((category, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: category, className: "category-admin-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-name" }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "category-admin-dot", style: { background: catColor(category) } }), /* @__PURE__ */ import_react2.default.createElement("span", null, category)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => moveCategory(category, -1), disabled: index === 0 }, "\u4E0A\u79FB"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => moveCategory(category, 1), disabled: index === data.categories.length - 1 }, "\u4E0B\u79FB"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => renameCategory(category) }, "\u91CD\u547D\u540D"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: () => removeCategory(category) }, "\u5220\u9664"))))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", onClick: addCategory }, "\u65B0\u589E\u5206\u7C7B"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u4F7F\u7528\u8BF4\u660E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "settings-note" }, /* @__PURE__ */ import_react2.default.createElement("p", null, "1. \u6570\u636E\u4F1A\u4F18\u5148\u5199\u5165\u670D\u52A1\u7AEF\uFF0C\u518D\u540C\u6B65\u5230\u5176\u4ED6\u8BBE\u5907\uFF0C\u8DE8\u7AEF\u4E00\u81F4\u6027\u4F1A\u6BD4 Gist \u65B9\u6848\u7A33\u5B9A\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "2. \u5982\u679C\u5176\u4ED6\u8BBE\u5907\u5DF2\u7ECF\u5199\u5165\u4E86\u65B0\u7248\u672C\uFF0C\u9876\u90E8\u4ECD\u4F1A\u63D0\u793A\u4F60\u51B3\u5B9A\u4FDD\u7559\u672C\u5730\u8FD8\u662F\u91C7\u7528\u670D\u52A1\u7AEF\u7248\u672C\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "3. \u5BFC\u5165\u3001\u91CD\u7F6E\u3001\u8986\u76D6\u670D\u52A1\u7AEF\u7248\u672C\u4E4B\u524D\uFF0C\u7CFB\u7EDF\u4ECD\u4F1A\u81EA\u52A8\u4FDD\u7559\u4E00\u4EFD\u672C\u5730\u5907\u4EFD\u3002")))), /* @__PURE__ */ import_react2.default.createElement(
       ConfirmDialog,
       {
         open: Boolean(confirmState),
@@ -22735,30 +22859,21 @@
       }
     ), /* @__PURE__ */ import_react2.default.createElement(ToastStack, { toasts }), /* @__PURE__ */ import_react2.default.createElement("input", { ref: fileRef, type: "file", accept: ".json", style: { display: "none" }, onChange: handleImportFile }));
   }
-  function renderCompactPlanItem(item, onToggle) {
+  function renderCompactPlanItem(item, onToggle, onRollover) {
     const label = item.title || item.content.split("\n")[0];
-    return /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react2.default.createElement(
-      "span",
-      {
-        onClick: (event) => {
-          event.stopPropagation();
-          onToggle();
-        },
-        style: {
-          flexShrink: 0,
-          width: 14,
-          height: 14,
-          borderRadius: 3,
-          border: `1.5px solid ${item.done ? "#22c55e" : "#ccc"}`,
-          background: item.done ? "#22c55e" : "transparent",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "pointer"
-        }
-      },
-      item.done ? /* @__PURE__ */ import_react2.default.createElement("span", { style: { color: "#fff", fontSize: 10, lineHeight: 1 } }, "\u2713") : null
-    ), /* @__PURE__ */ import_react2.default.createElement(
+    return /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, renderPlanActionButton({
+      label: "\u2713",
+      active: item.done,
+      activeColor: "#22c55e",
+      title: item.done ? "\u53D6\u6D88\u5B8C\u6210" : "\u6807\u8BB0\u5B8C\u6210",
+      onClick: onToggle
+    }), renderPlanActionButton({
+      label: "\xD7",
+      active: false,
+      activeColor: "#ef4444",
+      title: "\u672A\u5B8C\u6210\uFF0C\u5E73\u79FB\u5230\u6B21\u65E5",
+      onClick: onRollover
+    }), /* @__PURE__ */ import_react2.default.createElement(
       "span",
       {
         style: {
@@ -22773,6 +22888,37 @@
       },
       label
     ));
+  }
+  function renderPlanActionButton({ label, active, activeColor, title, onClick }) {
+    return /* @__PURE__ */ import_react2.default.createElement(
+      "button",
+      {
+        type: "button",
+        title,
+        onClick: (event) => {
+          event.stopPropagation();
+          onClick();
+        },
+        style: {
+          flexShrink: 0,
+          width: 14,
+          height: 14,
+          borderRadius: 3,
+          border: `1.5px solid ${active ? activeColor : "#ccc"}`,
+          background: active ? activeColor : "transparent",
+          color: active ? "#fff" : activeColor,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          padding: 0,
+          fontSize: 10,
+          lineHeight: 1,
+          fontWeight: 700
+        }
+      },
+      active || label === "\xD7" ? label : ""
+    );
   }
   (0, import_client.createRoot)(document.getElementById("app")).render(/* @__PURE__ */ import_react2.default.createElement(App, null));
 })();
