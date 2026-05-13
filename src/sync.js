@@ -1,7 +1,7 @@
 export const GIST_ID_KEY = "work-mgr-server-workspace";
 export const SESSION_TOKEN_KEY = "work-mgr-server-sync-session";
 
-const REVISION_KEY = "work-mgr-server-revision";
+const REVISION_KEY_PREFIX = "work-mgr-server-revision";
 export const DEFAULT_WORKSPACE_ID = "primary";
 const CONNECTED_SESSION = "server-sync";
 
@@ -14,19 +14,29 @@ function getApiBase() {
   return normalizeApiBase(globalThis.window?.WORK_MANAGER_API_BASE || "/api");
 }
 
-function readStoredRevision() {
-  const raw = localStorage.getItem(REVISION_KEY);
+function revisionKey(workspaceId = DEFAULT_WORKSPACE_ID) {
+  return `${REVISION_KEY_PREFIX}:${workspaceId || DEFAULT_WORKSPACE_ID}`;
+}
+
+function readStoredRevision(workspaceId) {
+  const raw = localStorage.getItem(revisionKey(workspaceId));
   return raw ? Number(raw) || 0 : 0;
 }
 
-function writeStoredRevision(revision) {
+function writeStoredRevision(workspaceId, revision) {
   if (typeof revision !== "number" || Number.isNaN(revision)) return;
-  localStorage.setItem(REVISION_KEY, String(revision));
+  localStorage.setItem(revisionKey(workspaceId), String(revision));
 }
 
-async function request(path, options = {}) {
+function statePath(workspaceId) {
+  if (!workspaceId || workspaceId === DEFAULT_WORKSPACE_ID) return "/state";
+  return `/state?userId=${encodeURIComponent(workspaceId)}`;
+}
+
+export async function request(path, options = {}) {
   const response = await fetch(`${getApiBase()}${path}`, {
     ...options,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(options.headers || {})
@@ -52,33 +62,83 @@ async function request(path, options = {}) {
 
 function createEmptyRemoteState() {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     _lastModified: 0,
+    categories: [],
     tasks: [],
     archivedTasks: []
   };
 }
 
+export async function login(username, password) {
+  const json = await request("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password })
+  });
+  return json.user;
+}
+
+export async function logout() {
+  await request("/auth/logout", { method: "POST" });
+}
+
+export async function getCurrentUser() {
+  const json = await request("/auth/me");
+  return json.user;
+}
+
+export async function listAdminUsers() {
+  const json = await request("/admin/users");
+  return json.users || [];
+}
+
+export async function createAdminUser(data) {
+  const json = await request("/admin/users", {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+  return json.user;
+}
+
+export async function updateAdminUser(userId, data) {
+  const json = await request(`/admin/users/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(data)
+  });
+  return json.user;
+}
+
+export async function resetAdminUserPassword(userId, password) {
+  const json = await request(`/admin/users/${encodeURIComponent(userId)}/password`, {
+    method: "POST",
+    body: JSON.stringify({ password })
+  });
+  return json.user;
+}
+
 export async function gistCreate(_token, data) {
-  const json = await request("/state", {
+  const workspaceId = DEFAULT_WORKSPACE_ID;
+  const json = await request(statePath(workspaceId), {
     method: "PUT",
     body: JSON.stringify({
       state: data,
-      baseRevision: readStoredRevision()
+      baseRevision: readStoredRevision(workspaceId)
     })
   });
 
-  writeStoredRevision(json.revision || 0);
-  return DEFAULT_WORKSPACE_ID;
+  writeStoredRevision(workspaceId, json.revision || 0);
+  return workspaceId;
 }
 
-export async function gistUpdate(_token, _gistId, data) {
+export async function gistUpdate(_token, workspaceId, data) {
+  const targetWorkspaceId = workspaceId || DEFAULT_WORKSPACE_ID;
+
   async function putState() {
-    return request("/state", {
+    return request(statePath(targetWorkspaceId), {
       method: "PUT",
       body: JSON.stringify({
         state: data,
-        baseRevision: readStoredRevision()
+        baseRevision: readStoredRevision(targetWorkspaceId)
       })
     });
   }
@@ -91,23 +151,23 @@ export async function gistUpdate(_token, _gistId, data) {
       throw error;
     }
 
-    // Last writer wins: refresh the revision from the server, then retry once.
-    writeStoredRevision(error.payload.revision);
+    writeStoredRevision(targetWorkspaceId, error.payload.revision);
     json = await putState();
   }
 
-  writeStoredRevision(json.revision || 0);
+  writeStoredRevision(targetWorkspaceId, json.revision || 0);
   return true;
 }
 
-export async function gistLoad(_token, _gistId) {
-  const json = await request("/state");
-  writeStoredRevision(json?.revision || 0);
+export async function gistLoad(_token, workspaceId) {
+  const targetWorkspaceId = workspaceId || DEFAULT_WORKSPACE_ID;
+  const json = await request(statePath(targetWorkspaceId));
+  writeStoredRevision(targetWorkspaceId, json?.revision || 0);
   return json?.state || createEmptyRemoteState();
 }
 
 export function getSessionToken() {
-  return sessionStorage.getItem(SESSION_TOKEN_KEY) || CONNECTED_SESSION;
+  return sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
 }
 
 export function setSessionToken(_token) {
@@ -119,7 +179,7 @@ export function clearSessionToken() {
 }
 
 export function getSavedGistId() {
-  return localStorage.getItem(GIST_ID_KEY) || DEFAULT_WORKSPACE_ID;
+  return localStorage.getItem(GIST_ID_KEY) || "";
 }
 
 export function setSavedGistId(gistId) {

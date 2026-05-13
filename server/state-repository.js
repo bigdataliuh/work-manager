@@ -1,12 +1,20 @@
+import { getFirstAdminUser } from "./auth-repository.js";
 import { getDbPool } from "./db.js";
 
-const WORKSPACE_ROW_ID = 1;
-const DEFAULT_CATEGORIES = ["项目", "商务", "开发", "日常任务", "临时任务", "机器人"];
+const LEGACY_WORKSPACE_ROW_ID = 1;
+const DEFAULT_CATEGORIES = [
+  "\u9879\u76ee",
+  "\u5546\u52a1",
+  "\u5f00\u53d1",
+  "\u65e5\u5e38\u4efb\u52a1",
+  "\u4e34\u65f6\u4efb\u52a1",
+  "\u673a\u5668\u4eba"
+];
 
 function normalizeCategoryName(category) {
   if (typeof category !== "string") return "";
   const trimmed = category.trim();
-  return trimmed === "活动" ? "机器人" : trimmed;
+  return trimmed === "\u6d3b\u52a8" ? "\u673a\u5668\u4eba" : trimmed;
 }
 
 function normalizeCategories(rawCategories, taskLists = []) {
@@ -58,6 +66,16 @@ export async function ensureSchema() {
   const pool = getDbPool();
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_states (
+      user_id INT UNSIGNED NOT NULL PRIMARY KEY,
+      data_json LONGTEXT NOT NULL,
+      revision BIGINT UNSIGNED NOT NULL DEFAULT 1,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_user_states_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS app_state (
       id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
       data_json LONGTEXT NOT NULL,
@@ -67,11 +85,35 @@ export async function ensureSchema() {
   `);
 }
 
-export async function getStateRecord() {
+export async function migrateLegacyStateToAdmin() {
+  const admin = await getFirstAdminUser();
+  if (!admin) return;
+
+  const pool = getDbPool();
+  const [existingRows] = await pool.query(
+    "SELECT user_id FROM user_states WHERE user_id = ? LIMIT 1",
+    [admin.id]
+  );
+  if (existingRows.length) return;
+
+  const [legacyRows] = await pool.query(
+    "SELECT data_json, revision FROM app_state WHERE id = ? LIMIT 1",
+    [LEGACY_WORKSPACE_ROW_ID]
+  );
+  if (!legacyRows.length) return;
+
+  const legacy = legacyRows[0];
+  await pool.query(
+    "INSERT INTO user_states (user_id, data_json, revision) VALUES (?, ?, ?)",
+    [admin.id, JSON.stringify(normalizeStateShape(JSON.parse(legacy.data_json))), Number(legacy.revision || 1)]
+  );
+}
+
+export async function getStateRecord(userId) {
   const pool = getDbPool();
   const [rows] = await pool.query(
-    "SELECT data_json, revision, updated_at FROM app_state WHERE id = ? LIMIT 1",
-    [WORKSPACE_ROW_ID]
+    "SELECT data_json, revision, updated_at FROM user_states WHERE user_id = ? LIMIT 1",
+    [userId]
   );
 
   if (!rows.length) {
@@ -90,7 +132,7 @@ export async function getStateRecord() {
   };
 }
 
-export async function saveStateRecord(state, baseRevision) {
+export async function saveStateRecord(userId, state, baseRevision) {
   const pool = getDbPool();
   const connection = await pool.getConnection();
 
@@ -98,8 +140,8 @@ export async function saveStateRecord(state, baseRevision) {
     await connection.beginTransaction();
 
     const [rows] = await connection.query(
-      "SELECT data_json, revision, updated_at FROM app_state WHERE id = ? FOR UPDATE",
-      [WORKSPACE_ROW_ID]
+      "SELECT data_json, revision, updated_at FROM user_states WHERE user_id = ? FOR UPDATE",
+      [userId]
     );
 
     const normalizedState = normalizeStateShape(state);
@@ -117,8 +159,8 @@ export async function saveStateRecord(state, baseRevision) {
       }
 
       await connection.query(
-        "INSERT INTO app_state (id, data_json, revision) VALUES (?, ?, 1)",
-        [WORKSPACE_ROW_ID, JSON.stringify(normalizedState)]
+        "INSERT INTO user_states (user_id, data_json, revision) VALUES (?, ?, 1)",
+        [userId, JSON.stringify(normalizedState)]
       );
 
       await connection.commit();
@@ -145,8 +187,8 @@ export async function saveStateRecord(state, baseRevision) {
 
     const nextRevision = currentRevision + 1;
     await connection.query(
-      "UPDATE app_state SET data_json = ?, revision = ? WHERE id = ?",
-      [JSON.stringify(normalizedState), nextRevision, WORKSPACE_ROW_ID]
+      "UPDATE user_states SET data_json = ?, revision = ? WHERE user_id = ?",
+      [JSON.stringify(normalizedState), nextRevision, userId]
     );
 
     await connection.commit();

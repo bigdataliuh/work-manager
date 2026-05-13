@@ -25,16 +25,19 @@ This file applies to the whole repository.
 1. Make changes locally in `C:\Users\RF\Code\work-manager`
 2. Run the narrowest relevant validation before claiming success
 3. Commit locally
-4. Push to `origin/main`
-5. Deploy from Git to the server
-6. Verify the deployed result on the server and through the public endpoint
+4. Push to `origin/main` when GitHub is reachable; this is for backup/history, not a deployment dependency
+5. Build a release package from the committed local version and upload it to the ECS server
+6. Run the server deployment script that unpacks the uploaded release package
+7. Verify the deployed result on the server and through the public endpoint
 
 ## Deployment Rules
 - Do not manually edit application source files on the server as a normal workflow
 - Do not develop inside the ECS deployment directory
 - Keep server-only configuration out of Git, especially `.env`
-- Production deployment directory is expected to be a clean Git checkout
-- If deployment state and Git differ, reconcile back into Git before doing more feature work
+- Production deployment now uses an uploaded release package, not `git pull` on the server
+- Git remains the local source of truth and commit history; GitHub is a remote backup, not the production deployment source
+- If deployment state and local Git differ, reconcile back into local Git before doing more feature work
+- Do not depend on ECS reaching GitHub; Alibaba Cloud to GitHub network access has been unreliable
 
 ## Validation
 - For frontend or shared changes, at minimum run:
@@ -57,4 +60,8 @@ This file applies to the whole repository.
 - Local repo path: `C:\Users\RF\Code\work-manager`
 - ECS clean deploy path: `/opt/work-manager-clean`
 - Legacy server path `/opt/work-manager` is not the preferred active source
+- ECS deploy user: `deploy@47.96.74.166`
+- Release package path on ECS: `/home/deploy/work-manager-release.tgz`
+- Deployment command on ECS: `sudo -n /usr/local/bin/deploy-work-manager`
+- Deployment script unpacks the uploaded release package into `/opt/work-manager-clean`, runs `npm install --omit=dev`, restarts `work-manager-api` with PM2, and checks `http://127.0.0.1:8787/api/health`
 - Nginx config should keep `/api/` behind reverse proxy so the browser uses same-origin `/api`

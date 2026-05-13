@@ -24,13 +24,20 @@ import {
 import {
   clearSavedGistId,
   clearSessionToken,
+  createAdminUser,
   getSavedGistId,
+  getCurrentUser,
   getSessionToken,
   gistCreate,
   gistLoad,
   gistUpdate,
+  listAdminUsers,
+  login,
+  logout,
+  resetAdminUserPassword,
   setSavedGistId,
-  setSessionToken
+  setSessionToken,
+  updateAdminUser
 } from "./sync.js";
 import { ConfirmDialog, Modal, MobileView, PBadge, SBadge, TaskForm, ToastStack } from "./components.jsx";
 
@@ -169,8 +176,8 @@ function App() {
   const [cellItems, setCellItems] = useState([{ title: "", content: "", done: false }]);
   const [expandedCell, setExpandedCell] = useState(null);
   const [newTask, setNewTask] = useState(() => createEmptyTask());
-  const [gistToken, setGistToken] = useState(() => getSessionToken());
-  const [gistId, setGistId] = useState(() => getSavedGistId());
+  const [gistToken, setGistToken] = useState("");
+  const [gistId, setGistId] = useState("");
   const [syncStatus, setSyncStatus] = useState("idle");
   const [tokenInput, setTokenInput] = useState("");
   const [remoteUpdate, setRemoteUpdate] = useState(null);
@@ -182,6 +189,13 @@ function App() {
   const [backupInfo, setBackupInfo] = useState(() => loadBackup());
   const [hasInitializedRemote, setHasInitializedRemote] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState({});
+  const [authStatus, setAuthStatus] = useState("loading");
+  const [currentUser, setCurrentUser] = useState(null);
+  const [workspaceUser, setWorkspaceUser] = useState(null);
+  const [loginForm, setLoginForm] = useState({ username: "", password: "" });
+  const [loginError, setLoginError] = useState("");
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminUserForm, setAdminUserForm] = useState({ username: "", displayName: "", password: "", role: "user" });
   const fileRef = useRef(null);
   const syncTimerRef = useRef(null);
   const todayColRef = useRef(null);
@@ -204,6 +218,151 @@ function App() {
     setBackupInfo(loadBackup());
     applyStateUpdate(updater);
   }
+
+  const isAdmin = currentUser?.role === "admin";
+
+  async function refreshAdminUsers() {
+    if (!isAdmin) return [];
+    const users = await listAdminUsers();
+    setAdminUsers(users);
+    setWorkspaceUser((current) => {
+      if (!current) return current;
+      return users.find((user) => user.id === current.id) || current;
+    });
+    return users;
+  }
+
+  function activateUserSession(user) {
+    setCurrentUser(user);
+    setWorkspaceUser(user);
+    setGistToken("session");
+    setGistId(String(user.id));
+    setSessionToken("session");
+    setHasInitializedRemote(false);
+    setRemoteUpdate(null);
+    setAuthStatus("authenticated");
+    dispatch({ type: "replace", data: defaultData() });
+  }
+
+  async function handleLogin(event) {
+    event.preventDefault();
+    setLoginError("");
+    setAuthStatus("loading");
+
+    try {
+      const user = await login(loginForm.username, loginForm.password);
+      activateUserSession(user);
+      setLoginForm({ username: "", password: "" });
+      if (user.role === "admin") {
+        const users = await listAdminUsers();
+        setAdminUsers(users);
+      }
+    } catch (error) {
+      console.error(error);
+      setAuthStatus("anonymous");
+      setLoginError("账号或密码不正确");
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await logout();
+    } catch (error) {
+      console.error(error);
+    }
+
+    clearSessionToken();
+    setCurrentUser(null);
+    setWorkspaceUser(null);
+    setAdminUsers([]);
+    setGistToken("");
+    setGistId("");
+    setHasInitializedRemote(false);
+    setRemoteUpdate(null);
+    setAuthStatus("anonymous");
+    dispatch({ type: "replace", data: defaultData() });
+  }
+
+  function switchWorkspaceUser(user) {
+    if (!user || user.id === workspaceUser?.id) return;
+    setWorkspaceUser(user);
+    setGistId(String(user.id));
+    setHasInitializedRemote(false);
+    setRemoteUpdate(null);
+    setShowArchive(false);
+    setShowAdd(false);
+    setEditTask(null);
+    setEditCell(null);
+    setExpandedCell(null);
+    dispatch({ type: "replace", data: defaultData() });
+    pushToast(`已切换到 ${user.displayName || user.username} 的工作台`, "warning");
+  }
+
+  async function handleCreateAdminUser(event) {
+    event.preventDefault();
+    try {
+      await createAdminUser(adminUserForm);
+      setAdminUserForm({ username: "", displayName: "", password: "", role: "user" });
+      await refreshAdminUsers();
+      pushToast("账号已创建");
+    } catch (error) {
+      console.error(error);
+      pushToast(error.message || "账号创建失败", "error");
+    }
+  }
+
+  async function handleToggleUserActive(user) {
+    if (user.id === currentUser?.id) {
+      pushToast("不能停用当前登录账号", "warning");
+      return;
+    }
+
+    try {
+      await updateAdminUser(user.id, { isActive: !user.isActive, role: user.role, displayName: user.displayName });
+      await refreshAdminUsers();
+      pushToast(user.isActive ? "账号已停用" : "账号已启用", "warning");
+    } catch (error) {
+      console.error(error);
+      pushToast("账号状态更新失败", "error");
+    }
+  }
+
+  async function handleResetUserPassword(user) {
+    const password = window.prompt(`输入 ${user.displayName || user.username} 的新密码，至少 8 位`);
+    if (!password) return;
+
+    try {
+      await resetAdminUserPassword(user.id, password);
+      await refreshAdminUsers();
+      pushToast("密码已重置");
+    } catch (error) {
+      console.error(error);
+      pushToast(error.message || "密码重置失败", "error");
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+
+    getCurrentUser()
+      .then(async (user) => {
+        if (!active) return;
+        activateUserSession(user);
+        if (user.role === "admin") {
+          const users = await listAdminUsers();
+          if (active) setAdminUsers(users);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setAuthStatus("anonymous");
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!toasts.length) return undefined;
@@ -799,6 +958,46 @@ function App() {
 
   const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
 
+  if (authStatus === "loading") {
+    return (
+      <div className="auth-shell">
+        <div className="auth-panel">
+          <div className="auth-title">工作管理系统</div>
+          <div className="auth-note">正在检查登录状态...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="auth-shell">
+        <form className="auth-panel" onSubmit={handleLogin}>
+          <div className="auth-title">工作管理系统</div>
+          <div className="auth-note">使用你的部门账号登录后进入个人工作台。</div>
+          <label className="field-label">账号</label>
+          <input
+            className="field-input"
+            value={loginForm.username}
+            onChange={(event) => setLoginForm((current) => ({ ...current, username: event.target.value }))}
+            autoComplete="username"
+            autoFocus
+          />
+          <label className="field-label">密码</label>
+          <input
+            className="field-input"
+            type="password"
+            value={loginForm.password}
+            onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))}
+            autoComplete="current-password"
+          />
+          {loginError ? <div className="auth-error">{loginError}</div> : null}
+          <button className="btn btn-dark btn-block" type="submit">登录</button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <>
       {isWeChat ? (
@@ -814,7 +1013,7 @@ function App() {
       <div className="header">
         {isMobile ? (
           <div className="header-top">
-            <h1>📋 工作管理</h1>
+            <h1>{workspaceUser?.displayName || currentUser.displayName || currentUser.username}</h1>
             <div className="header-actions">
               {gistId ? <span className={`sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}`}>☁ {syncStatus === "ok" ? "已同步" : syncStatus === "error" ? "失败" : "同步中"}</span> : null}
               <button className="btn btn-ghost" onClick={() => setShowSettings(true)}>⚙</button>
@@ -828,7 +1027,7 @@ function App() {
                 <img src="./assets/jiangsu-wenchuang-mark.png" alt="江苏文创" className="header-brand-logo" />
               </div>
               <div className="header-brand-copy">
-                <h1>刘昊的工作台</h1>
+                <h1>{workspaceUser?.id === currentUser?.id ? `${currentUser.displayName || currentUser.username} 的工作台` : `${workspaceUser?.displayName || workspaceUser?.username} 的工作台`}</h1>
               </div>
             </div>
 
@@ -846,6 +1045,18 @@ function App() {
 
             <div className="header-actions">
               {gistId ? <span className={`sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}`}>☁ {syncStatus === "ok" ? "已同步" : syncStatus === "error" ? "失败" : "同步中"}</span> : null}
+              {isAdmin && adminUsers.length ? (
+                <select
+                  className="workspace-select"
+                  value={workspaceUser?.id || ""}
+                  onChange={(event) => switchWorkspaceUser(adminUsers.find((user) => user.id === Number(event.target.value)))}
+                >
+                  {adminUsers.map((user) => (
+                    <option key={user.id} value={user.id}>{user.displayName || user.username}</option>
+                  ))}
+                </select>
+              ) : null}
+              <button className="btn btn-ghost" onClick={handleLogout}>退出</button>
               <button className="btn btn-ghost" onClick={() => setShowArchive(true)}>已完结</button>
               <button className="btn btn-ghost btn-icon" onClick={() => setShowSettings(true)}>⚙</button>
               <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ 新任务</button>
@@ -1307,8 +1518,64 @@ function App() {
           </p>
           <div className="inline-actions">
             <button className="btn btn-outline" onClick={pullFromCloud}>↓ 从服务端刷新</button>
+            <button className="btn btn-outline" onClick={handleLogout}>退出登录</button>
           </div>
         </div>
+
+        {isAdmin ? (
+          <div className="data-section">
+            <div className="data-section-title">账号管理</div>
+            <form className="admin-user-form" onSubmit={handleCreateAdminUser}>
+              <input
+                className="field-input"
+                value={adminUserForm.username}
+                onChange={(event) => setAdminUserForm((current) => ({ ...current, username: event.target.value }))}
+                placeholder="账号，如 zhangsan"
+              />
+              <input
+                className="field-input"
+                value={adminUserForm.displayName}
+                onChange={(event) => setAdminUserForm((current) => ({ ...current, displayName: event.target.value }))}
+                placeholder="显示名"
+              />
+              <input
+                className="field-input"
+                type="password"
+                value={adminUserForm.password}
+                onChange={(event) => setAdminUserForm((current) => ({ ...current, password: event.target.value }))}
+                placeholder="初始密码，至少 8 位"
+              />
+              <select
+                className="field-select"
+                value={adminUserForm.role}
+                onChange={(event) => setAdminUserForm((current) => ({ ...current, role: event.target.value }))}
+              >
+                <option value="user">普通用户</option>
+                <option value="admin">管理员</option>
+              </select>
+              <button className="btn btn-dark" type="submit">创建账号</button>
+            </form>
+            <div className="admin-user-list">
+              {adminUsers.map((user) => (
+                <div key={user.id} className="admin-user-row">
+                  <div className="admin-user-main">
+                    <div className="admin-user-name">{user.displayName || user.username}</div>
+                    <div className="admin-user-meta">
+                      {user.username} · {user.role === "admin" ? "管理员" : "普通用户"} · {user.isActive ? "启用" : "停用"}
+                    </div>
+                  </div>
+                  <div className="admin-user-actions">
+                    <button className="btn btn-outline" onClick={() => switchWorkspaceUser(user)}>工作台</button>
+                    <button className="btn btn-outline" onClick={() => handleResetUserPassword(user)}>重置密码</button>
+                    <button className="btn btn-danger" onClick={() => handleToggleUserActive(user)} disabled={user.id === currentUser?.id}>
+                      {user.isActive ? "停用" : "启用"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="data-section">
           <div className="data-section-title">本地数据</div>

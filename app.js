@@ -21707,7 +21707,7 @@
   // src/sync.js
   var GIST_ID_KEY = "work-mgr-server-workspace";
   var SESSION_TOKEN_KEY = "work-mgr-server-sync-session";
-  var REVISION_KEY = "work-mgr-server-revision";
+  var REVISION_KEY_PREFIX = "work-mgr-server-revision";
   var DEFAULT_WORKSPACE_ID = "primary";
   var CONNECTED_SESSION = "server-sync";
   function normalizeApiBase(base) {
@@ -21717,17 +21717,25 @@
   function getApiBase() {
     return normalizeApiBase(globalThis.window?.WORK_MANAGER_API_BASE || "/api");
   }
-  function readStoredRevision() {
-    const raw = localStorage.getItem(REVISION_KEY);
+  function revisionKey(workspaceId = DEFAULT_WORKSPACE_ID) {
+    return `${REVISION_KEY_PREFIX}:${workspaceId || DEFAULT_WORKSPACE_ID}`;
+  }
+  function readStoredRevision(workspaceId) {
+    const raw = localStorage.getItem(revisionKey(workspaceId));
     return raw ? Number(raw) || 0 : 0;
   }
-  function writeStoredRevision(revision) {
+  function writeStoredRevision(workspaceId, revision) {
     if (typeof revision !== "number" || Number.isNaN(revision)) return;
-    localStorage.setItem(REVISION_KEY, String(revision));
+    localStorage.setItem(revisionKey(workspaceId), String(revision));
+  }
+  function statePath(workspaceId) {
+    if (!workspaceId || workspaceId === DEFAULT_WORKSPACE_ID) return "/state";
+    return `/state?userId=${encodeURIComponent(workspaceId)}`;
   }
   async function request(path, options = {}) {
     const response = await fetch(`${getApiBase()}${path}`, {
       ...options,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         ...options.headers || {}
@@ -21749,30 +21757,72 @@
   }
   function createEmptyRemoteState() {
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       _lastModified: 0,
+      categories: [],
       tasks: [],
       archivedTasks: []
     };
   }
+  async function login(username, password) {
+    const json = await request("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password })
+    });
+    return json.user;
+  }
+  async function logout() {
+    await request("/auth/logout", { method: "POST" });
+  }
+  async function getCurrentUser() {
+    const json = await request("/auth/me");
+    return json.user;
+  }
+  async function listAdminUsers() {
+    const json = await request("/admin/users");
+    return json.users || [];
+  }
+  async function createAdminUser(data) {
+    const json = await request("/admin/users", {
+      method: "POST",
+      body: JSON.stringify(data)
+    });
+    return json.user;
+  }
+  async function updateAdminUser(userId, data) {
+    const json = await request(`/admin/users/${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(data)
+    });
+    return json.user;
+  }
+  async function resetAdminUserPassword(userId, password) {
+    const json = await request(`/admin/users/${encodeURIComponent(userId)}/password`, {
+      method: "POST",
+      body: JSON.stringify({ password })
+    });
+    return json.user;
+  }
   async function gistCreate(_token, data) {
-    const json = await request("/state", {
+    const workspaceId = DEFAULT_WORKSPACE_ID;
+    const json = await request(statePath(workspaceId), {
       method: "PUT",
       body: JSON.stringify({
         state: data,
-        baseRevision: readStoredRevision()
+        baseRevision: readStoredRevision(workspaceId)
       })
     });
-    writeStoredRevision(json.revision || 0);
-    return DEFAULT_WORKSPACE_ID;
+    writeStoredRevision(workspaceId, json.revision || 0);
+    return workspaceId;
   }
-  async function gistUpdate(_token, _gistId, data) {
+  async function gistUpdate(_token, workspaceId, data) {
+    const targetWorkspaceId = workspaceId || DEFAULT_WORKSPACE_ID;
     async function putState() {
-      return request("/state", {
+      return request(statePath(targetWorkspaceId), {
         method: "PUT",
         body: JSON.stringify({
           state: data,
-          baseRevision: readStoredRevision()
+          baseRevision: readStoredRevision(targetWorkspaceId)
         })
       });
     }
@@ -21783,19 +21833,17 @@
       if (error?.status !== 409 || typeof error?.payload?.revision !== "number") {
         throw error;
       }
-      writeStoredRevision(error.payload.revision);
+      writeStoredRevision(targetWorkspaceId, error.payload.revision);
       json = await putState();
     }
-    writeStoredRevision(json.revision || 0);
+    writeStoredRevision(targetWorkspaceId, json.revision || 0);
     return true;
   }
-  async function gistLoad(_token, _gistId) {
-    const json = await request("/state");
-    writeStoredRevision(json?.revision || 0);
+  async function gistLoad(_token, workspaceId) {
+    const targetWorkspaceId = workspaceId || DEFAULT_WORKSPACE_ID;
+    const json = await request(statePath(targetWorkspaceId));
+    writeStoredRevision(targetWorkspaceId, json?.revision || 0);
     return json?.state || createEmptyRemoteState();
-  }
-  function getSessionToken() {
-    return sessionStorage.getItem(SESSION_TOKEN_KEY) || CONNECTED_SESSION;
   }
   function setSessionToken(_token) {
     sessionStorage.setItem(SESSION_TOKEN_KEY, CONNECTED_SESSION);
@@ -21804,7 +21852,7 @@
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
   }
   function getSavedGistId() {
-    return localStorage.getItem(GIST_ID_KEY) || DEFAULT_WORKSPACE_ID;
+    return localStorage.getItem(GIST_ID_KEY) || "";
   }
   function setSavedGistId(gistId) {
     localStorage.setItem(GIST_ID_KEY, gistId || DEFAULT_WORKSPACE_ID);
@@ -22143,8 +22191,8 @@
     const [cellItems, setCellItems] = (0, import_react2.useState)([{ title: "", content: "", done: false }]);
     const [expandedCell, setExpandedCell] = (0, import_react2.useState)(null);
     const [newTask, setNewTask] = (0, import_react2.useState)(() => createEmptyTask());
-    const [gistToken, setGistToken] = (0, import_react2.useState)(() => getSessionToken());
-    const [gistId, setGistId] = (0, import_react2.useState)(() => getSavedGistId());
+    const [gistToken, setGistToken] = (0, import_react2.useState)("");
+    const [gistId, setGistId] = (0, import_react2.useState)("");
     const [syncStatus, setSyncStatus] = (0, import_react2.useState)("idle");
     const [tokenInput, setTokenInput] = (0, import_react2.useState)("");
     const [remoteUpdate, setRemoteUpdate] = (0, import_react2.useState)(null);
@@ -22156,6 +22204,13 @@
     const [backupInfo, setBackupInfo] = (0, import_react2.useState)(() => loadBackup());
     const [hasInitializedRemote, setHasInitializedRemote] = (0, import_react2.useState)(false);
     const [collapsedCategories, setCollapsedCategories] = (0, import_react2.useState)({});
+    const [authStatus, setAuthStatus] = (0, import_react2.useState)("loading");
+    const [currentUser, setCurrentUser] = (0, import_react2.useState)(null);
+    const [workspaceUser, setWorkspaceUser] = (0, import_react2.useState)(null);
+    const [loginForm, setLoginForm] = (0, import_react2.useState)({ username: "", password: "" });
+    const [loginError, setLoginError] = (0, import_react2.useState)("");
+    const [adminUsers, setAdminUsers] = (0, import_react2.useState)([]);
+    const [adminUserForm, setAdminUserForm] = (0, import_react2.useState)({ username: "", displayName: "", password: "", role: "user" });
     const fileRef = (0, import_react2.useRef)(null);
     const syncTimerRef = (0, import_react2.useRef)(null);
     const todayColRef = (0, import_react2.useRef)(null);
@@ -22174,6 +22229,133 @@
       setBackupInfo(loadBackup());
       applyStateUpdate(updater);
     }
+    const isAdmin = currentUser?.role === "admin";
+    async function refreshAdminUsers() {
+      if (!isAdmin) return [];
+      const users = await listAdminUsers();
+      setAdminUsers(users);
+      setWorkspaceUser((current) => {
+        if (!current) return current;
+        return users.find((user) => user.id === current.id) || current;
+      });
+      return users;
+    }
+    function activateUserSession(user) {
+      setCurrentUser(user);
+      setWorkspaceUser(user);
+      setGistToken("session");
+      setGistId(String(user.id));
+      setSessionToken("session");
+      setHasInitializedRemote(false);
+      setRemoteUpdate(null);
+      setAuthStatus("authenticated");
+      dispatch({ type: "replace", data: defaultData() });
+    }
+    async function handleLogin(event) {
+      event.preventDefault();
+      setLoginError("");
+      setAuthStatus("loading");
+      try {
+        const user = await login(loginForm.username, loginForm.password);
+        activateUserSession(user);
+        setLoginForm({ username: "", password: "" });
+        if (user.role === "admin") {
+          const users = await listAdminUsers();
+          setAdminUsers(users);
+        }
+      } catch (error) {
+        console.error(error);
+        setAuthStatus("anonymous");
+        setLoginError("\u8D26\u53F7\u6216\u5BC6\u7801\u4E0D\u6B63\u786E");
+      }
+    }
+    async function handleLogout() {
+      try {
+        await logout();
+      } catch (error) {
+        console.error(error);
+      }
+      clearSessionToken();
+      setCurrentUser(null);
+      setWorkspaceUser(null);
+      setAdminUsers([]);
+      setGistToken("");
+      setGistId("");
+      setHasInitializedRemote(false);
+      setRemoteUpdate(null);
+      setAuthStatus("anonymous");
+      dispatch({ type: "replace", data: defaultData() });
+    }
+    function switchWorkspaceUser(user) {
+      if (!user || user.id === workspaceUser?.id) return;
+      setWorkspaceUser(user);
+      setGistId(String(user.id));
+      setHasInitializedRemote(false);
+      setRemoteUpdate(null);
+      setShowArchive(false);
+      setShowAdd(false);
+      setEditTask(null);
+      setEditCell(null);
+      setExpandedCell(null);
+      dispatch({ type: "replace", data: defaultData() });
+      pushToast(`\u5DF2\u5207\u6362\u5230 ${user.displayName || user.username} \u7684\u5DE5\u4F5C\u53F0`, "warning");
+    }
+    async function handleCreateAdminUser(event) {
+      event.preventDefault();
+      try {
+        await createAdminUser(adminUserForm);
+        setAdminUserForm({ username: "", displayName: "", password: "", role: "user" });
+        await refreshAdminUsers();
+        pushToast("\u8D26\u53F7\u5DF2\u521B\u5EFA");
+      } catch (error) {
+        console.error(error);
+        pushToast(error.message || "\u8D26\u53F7\u521B\u5EFA\u5931\u8D25", "error");
+      }
+    }
+    async function handleToggleUserActive(user) {
+      if (user.id === currentUser?.id) {
+        pushToast("\u4E0D\u80FD\u505C\u7528\u5F53\u524D\u767B\u5F55\u8D26\u53F7", "warning");
+        return;
+      }
+      try {
+        await updateAdminUser(user.id, { isActive: !user.isActive, role: user.role, displayName: user.displayName });
+        await refreshAdminUsers();
+        pushToast(user.isActive ? "\u8D26\u53F7\u5DF2\u505C\u7528" : "\u8D26\u53F7\u5DF2\u542F\u7528", "warning");
+      } catch (error) {
+        console.error(error);
+        pushToast("\u8D26\u53F7\u72B6\u6001\u66F4\u65B0\u5931\u8D25", "error");
+      }
+    }
+    async function handleResetUserPassword(user) {
+      const password = window.prompt(`\u8F93\u5165 ${user.displayName || user.username} \u7684\u65B0\u5BC6\u7801\uFF0C\u81F3\u5C11 8 \u4F4D`);
+      if (!password) return;
+      try {
+        await resetAdminUserPassword(user.id, password);
+        await refreshAdminUsers();
+        pushToast("\u5BC6\u7801\u5DF2\u91CD\u7F6E");
+      } catch (error) {
+        console.error(error);
+        pushToast(error.message || "\u5BC6\u7801\u91CD\u7F6E\u5931\u8D25", "error");
+      }
+    }
+    (0, import_react2.useEffect)(() => {
+      let active = true;
+      getCurrentUser().then(async (user) => {
+        if (!active) return;
+        activateUserSession(user);
+        if (user.role === "admin") {
+          const users = await listAdminUsers();
+          if (active) setAdminUsers(users);
+        }
+      }).catch(() => {
+        if (active) {
+          setAuthStatus("anonymous");
+        }
+      });
+      return () => {
+        active = false;
+      };
+    }, []);
     (0, import_react2.useEffect)(() => {
       if (!toasts.length) return void 0;
       const timer = setTimeout(() => {
@@ -22668,7 +22850,39 @@
       todayColRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
     }
     const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
-    return /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, isWeChat ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "info-banner wechat" }, /* @__PURE__ */ import_react2.default.createElement("span", { style: { fontSize: 20 } }, "\u{1F4AC}"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("div", { style: { fontWeight: 600 } }, "\u8BF7\u5728\u5916\u90E8\u6D4F\u89C8\u5668\u4E2D\u6253\u5F00"), /* @__PURE__ */ import_react2.default.createElement("div", { style: { opacity: 0.9, fontSize: 12 } }, "\u70B9\u53F3\u4E0A\u89D2 \xB7\xB7\xB7 \u2192 \u9009\u62E9\u300C\u5728\u6D4F\u89C8\u5668\u6253\u5F00\u300D\uFF0C\u6570\u636E\u540C\u6B65\u624D\u80FD\u6B63\u5E38\u5DE5\u4F5C"))) : null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "header" }, isMobile ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-top" }, /* @__PURE__ */ import_react2.default.createElement("h1", null, "\u{1F4CB} \u5DE5\u4F5C\u7BA1\u7406"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-actions" }, gistId ? /* @__PURE__ */ import_react2.default.createElement("span", { className: `sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}` }, "\u2601 ", syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u5931\u8D25" : "\u540C\u6B65\u4E2D") : null, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost", onClick: () => setShowSettings(true) }, "\u2699"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost", onClick: () => setMobileDay(dateKey(/* @__PURE__ */ new Date())) }, "\u4ECA\u65E5"))) : /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-desktop" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-brand" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-brand-mark" }, /* @__PURE__ */ import_react2.default.createElement("img", { src: "./assets/jiangsu-wenchuang-mark.png", alt: "\u6C5F\u82CF\u6587\u521B", className: "header-brand-logo" })), /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-brand-copy" }, /* @__PURE__ */ import_react2.default.createElement("h1", null, "\u5218\u660A\u7684\u5DE5\u4F5C\u53F0"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-center" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "week-nav" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "week-nav-arrow", onClick: () => setWeekOffset((current) => current - 1) }, "\u2039"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "week-nav-core" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "week-info" }, fmtDate(days[0]), " - ", fmtDate(days[6])), weekOffset === 0 ? /* @__PURE__ */ import_react2.default.createElement("span", { className: "badge-week" }, "\u672C\u5468") : null, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn-today", onClick: scrollToToday }, "\u4ECA\u65E5")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "week-nav-arrow", onClick: () => setWeekOffset((current) => current + 1) }, "\u203A"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-actions" }, gistId ? /* @__PURE__ */ import_react2.default.createElement("span", { className: `sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}` }, "\u2601 ", syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u5931\u8D25" : "\u540C\u6B65\u4E2D") : null, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost", onClick: () => setShowArchive(true) }, "\u5DF2\u5B8C\u7ED3"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost btn-icon", onClick: () => setShowSettings(true) }, "\u2699"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-primary", onClick: () => setShowAdd(true) }, "+ \u65B0\u4EFB\u52A1")))), remoteUpdate ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "sync-banner" }, /* @__PURE__ */ import_react2.default.createElement("span", null, "\u2601\uFE0F \u4E91\u7AEF\u53D1\u73B0\u65B0\u7248\u672C\uFF08", new Date(remoteUpdate._lastModified).toLocaleTimeString(), "\uFF09\u3002\u5148\u51B3\u5B9A\u4FDD\u7559\u672C\u5730\u8FD8\u662F\u4F7F\u7528\u4E91\u7AEF\uFF0C\u907F\u514D\u76F4\u63A5\u4E92\u76F8\u8986\u76D6\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "sync-banner-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: keepLocalVersion }, "\u4FDD\u7559\u672C\u5730"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", onClick: useCloudVersion }, "\u4F7F\u7528\u4E91\u7AEF"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => setRemoteUpdate(null) }, "\u7A0D\u540E\u5904\u7406"))) : null, isMobile ? /* @__PURE__ */ import_react2.default.createElement(
+    if (authStatus === "loading") {
+      return /* @__PURE__ */ import_react2.default.createElement("div", { className: "auth-shell" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "auth-panel" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "auth-title" }, "\u5DE5\u4F5C\u7BA1\u7406\u7CFB\u7EDF"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "auth-note" }, "\u6B63\u5728\u68C0\u67E5\u767B\u5F55\u72B6\u6001...")));
+    }
+    if (!currentUser) {
+      return /* @__PURE__ */ import_react2.default.createElement("div", { className: "auth-shell" }, /* @__PURE__ */ import_react2.default.createElement("form", { className: "auth-panel", onSubmit: handleLogin }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "auth-title" }, "\u5DE5\u4F5C\u7BA1\u7406\u7CFB\u7EDF"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "auth-note" }, "\u4F7F\u7528\u4F60\u7684\u90E8\u95E8\u8D26\u53F7\u767B\u5F55\u540E\u8FDB\u5165\u4E2A\u4EBA\u5DE5\u4F5C\u53F0\u3002"), /* @__PURE__ */ import_react2.default.createElement("label", { className: "field-label" }, "\u8D26\u53F7"), /* @__PURE__ */ import_react2.default.createElement(
+        "input",
+        {
+          className: "field-input",
+          value: loginForm.username,
+          onChange: (event) => setLoginForm((current) => ({ ...current, username: event.target.value })),
+          autoComplete: "username",
+          autoFocus: true
+        }
+      ), /* @__PURE__ */ import_react2.default.createElement("label", { className: "field-label" }, "\u5BC6\u7801"), /* @__PURE__ */ import_react2.default.createElement(
+        "input",
+        {
+          className: "field-input",
+          type: "password",
+          value: loginForm.password,
+          onChange: (event) => setLoginForm((current) => ({ ...current, password: event.target.value })),
+          autoComplete: "current-password"
+        }
+      ), loginError ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "auth-error" }, loginError) : null, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark btn-block", type: "submit" }, "\u767B\u5F55")));
+    }
+    return /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, isWeChat ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "info-banner wechat" }, /* @__PURE__ */ import_react2.default.createElement("span", { style: { fontSize: 20 } }, "\u{1F4AC}"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("div", { style: { fontWeight: 600 } }, "\u8BF7\u5728\u5916\u90E8\u6D4F\u89C8\u5668\u4E2D\u6253\u5F00"), /* @__PURE__ */ import_react2.default.createElement("div", { style: { opacity: 0.9, fontSize: 12 } }, "\u70B9\u53F3\u4E0A\u89D2 \xB7\xB7\xB7 \u2192 \u9009\u62E9\u300C\u5728\u6D4F\u89C8\u5668\u6253\u5F00\u300D\uFF0C\u6570\u636E\u540C\u6B65\u624D\u80FD\u6B63\u5E38\u5DE5\u4F5C"))) : null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "header" }, isMobile ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-top" }, /* @__PURE__ */ import_react2.default.createElement("h1", null, workspaceUser?.displayName || currentUser.displayName || currentUser.username), /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-actions" }, gistId ? /* @__PURE__ */ import_react2.default.createElement("span", { className: `sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}` }, "\u2601 ", syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u5931\u8D25" : "\u540C\u6B65\u4E2D") : null, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost", onClick: () => setShowSettings(true) }, "\u2699"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost", onClick: () => setMobileDay(dateKey(/* @__PURE__ */ new Date())) }, "\u4ECA\u65E5"))) : /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-desktop" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-brand" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-brand-mark" }, /* @__PURE__ */ import_react2.default.createElement("img", { src: "./assets/jiangsu-wenchuang-mark.png", alt: "\u6C5F\u82CF\u6587\u521B", className: "header-brand-logo" })), /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-brand-copy" }, /* @__PURE__ */ import_react2.default.createElement("h1", null, workspaceUser?.id === currentUser?.id ? `${currentUser.displayName || currentUser.username} \u7684\u5DE5\u4F5C\u53F0` : `${workspaceUser?.displayName || workspaceUser?.username} \u7684\u5DE5\u4F5C\u53F0`))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-center" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "week-nav" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "week-nav-arrow", onClick: () => setWeekOffset((current) => current - 1) }, "\u2039"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "week-nav-core" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "week-info" }, fmtDate(days[0]), " - ", fmtDate(days[6])), weekOffset === 0 ? /* @__PURE__ */ import_react2.default.createElement("span", { className: "badge-week" }, "\u672C\u5468") : null, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn-today", onClick: scrollToToday }, "\u4ECA\u65E5")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "week-nav-arrow", onClick: () => setWeekOffset((current) => current + 1) }, "\u203A"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "header-actions" }, gistId ? /* @__PURE__ */ import_react2.default.createElement("span", { className: `sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}` }, "\u2601 ", syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u5931\u8D25" : "\u540C\u6B65\u4E2D") : null, isAdmin && adminUsers.length ? /* @__PURE__ */ import_react2.default.createElement(
+      "select",
+      {
+        className: "workspace-select",
+        value: workspaceUser?.id || "",
+        onChange: (event) => switchWorkspaceUser(adminUsers.find((user) => user.id === Number(event.target.value)))
+      },
+      adminUsers.map((user) => /* @__PURE__ */ import_react2.default.createElement("option", { key: user.id, value: user.id }, user.displayName || user.username))
+    ) : null, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost", onClick: handleLogout }, "\u9000\u51FA"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost", onClick: () => setShowArchive(true) }, "\u5DF2\u5B8C\u7ED3"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-ghost btn-icon", onClick: () => setShowSettings(true) }, "\u2699"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-primary", onClick: () => setShowAdd(true) }, "+ \u65B0\u4EFB\u52A1")))), remoteUpdate ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "sync-banner" }, /* @__PURE__ */ import_react2.default.createElement("span", null, "\u2601\uFE0F \u4E91\u7AEF\u53D1\u73B0\u65B0\u7248\u672C\uFF08", new Date(remoteUpdate._lastModified).toLocaleTimeString(), "\uFF09\u3002\u5148\u51B3\u5B9A\u4FDD\u7559\u672C\u5730\u8FD8\u662F\u4F7F\u7528\u4E91\u7AEF\uFF0C\u907F\u514D\u76F4\u63A5\u4E92\u76F8\u8986\u76D6\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "sync-banner-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: keepLocalVersion }, "\u4FDD\u7559\u672C\u5730"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", onClick: useCloudVersion }, "\u4F7F\u7528\u4E91\u7AEF"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => setRemoteUpdate(null) }, "\u7A0D\u540E\u5904\u7406"))) : null, isMobile ? /* @__PURE__ */ import_react2.default.createElement(
       MobileView,
       {
         data: mobileTasks,
@@ -22846,7 +23060,41 @@
         })
       },
       "\u5220\u9664"
-    ))))))), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: Boolean(archiveDetailTask), onClose: () => setArchiveDetailTask(null), title: archiveDetailTask ? `${archiveDetailTask.name} \xB7 \u5386\u53F2\u8BA1\u5212` : "\u5386\u53F2\u8BA1\u5212", width: 520 }, archiveDetailTask ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-detail-meta" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5206\u7C7B\uFF1A"), archiveDetailTask.category), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F52\u6863\u65F6\u95F4\uFF1A"), archiveDetailTask.archivedAt ? new Date(archiveDetailTask.archivedAt).toLocaleString() : "\u672A\u8BB0\u5F55"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u622A\u6B62\u65E5\u671F\uFF1A"), formatDeadline(archiveDetailTask) || "\u672A\u8BBE\u7F6E")), getArchivePlanDays(archiveDetailTask).length === 0 ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { padding: 20, textAlign: "center", color: "#bbb" } }, "\u8FD9\u4E2A\u4EFB\u52A1\u6CA1\u6709\u5386\u53F2\u8BA1\u5212\u8BB0\u5F55") : /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-list" }, getArchivePlanDays(archiveDetailTask).map(([day, items]) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${archiveDetailTask.id}-${day}`, className: "archive-plan-day" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-day-label" }, formatDateInput(day)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-items" }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${archiveDetailTask.id}-${day}-${index}`, className: "archive-plan-item" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-check ${item.done ? "done" : ""}` }, item.done ? "\u2713" : ""), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-copy" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-title ${item.done ? "done" : ""}` }, item.title || item.content.split("\n")[0]), item.title && item.content ? /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-detail ${item.done ? "done" : ""}` }, item.content) : null)))))))) : null), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showSettings, onClose: () => setShowSettings(false), title: "\u8BBE\u7F6E", width: 420 }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section", style: { marginTop: 0, paddingTop: 0, borderTop: "none" } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u2601\uFE0F \u670D\u52A1\u7AEF\u540C\u6B65"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u65B9\u5F0F\uFF1A"), "Alibaba Cloud API + MySQL"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F53\u524D\u5DE5\u4F5C\u7A7A\u95F4\uFF1A"), gistId), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u72B6\u6001\uFF1A"), syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u8FDE\u63A5\u5931\u8D25" : "\u540C\u6B65\u4E2D")), /* @__PURE__ */ import_react2.default.createElement("p", { className: "settings-note", style: { marginTop: 10 } }, "\u5F53\u524D\u7248\u672C\u4EE5\u670D\u52A1\u7AEF\u6570\u636E\u5E93\u4F5C\u4E3A\u552F\u4E00\u771F\u5B9E\u6570\u636E\u6E90\u3002\u672C\u5730 localStorage \u7EE7\u7EED\u4FDD\u7559\u7528\u4E8E\u7F13\u5B58\u548C\u5907\u4EFD\uFF0C\u4E0D\u518D\u4F7F\u7528 GitHub Gist \u4F5C\u4E3A\u4E3B\u540C\u6B65\u65B9\u5F0F\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: pullFromCloud }, "\u2193 \u4ECE\u670D\u52A1\u7AEF\u5237\u65B0"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u6570\u636E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-primary", onClick: exportData }, "\u{1F4E4} \u5BFC\u51FA"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => fileRef.current?.click() }, "\u{1F4E5} \u5BFC\u5165"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: resetDataWithBackup }, "\u{1F5D1} \u91CD\u7F6E"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u5907\u4EFD"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, backupInfo ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u6700\u8FD1\u5907\u4EFD\uFF1A"), new Date(backupInfo.savedAt).toLocaleString()), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u539F\u56E0\uFF1A"), backupInfo.reason)) : /* @__PURE__ */ import_react2.default.createElement("div", null, "\u5F53\u524D\u6CA1\u6709\u672C\u5730\u5907\u4EFD\u3002")), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: restoreBackup }, "\u6062\u590D\u6700\u8FD1\u5907\u4EFD"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u5206\u7C7B\u7BA1\u7406"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "settings-note" }, "\u5206\u7C7B\u987A\u5E8F\u4F1A\u540C\u6B65\u5230\u9876\u90E8\u6807\u7B7E\u680F\u548C\u65B0\u589E\u4EFB\u52A1\u8868\u5355\u3002\u5220\u9664\u5206\u7C7B\u65F6\uFF0C\u7CFB\u7EDF\u4F1A\u5148\u8981\u6C42\u4F60\u628A\u73B0\u6709\u4EFB\u52A1\u8FC1\u79FB\u5230\u5176\u4ED6\u5206\u7C7B\uFF0C\u4E0D\u4F1A\u76F4\u63A5\u4E22\u5931\u4EFB\u52A1\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-list" }, data.categories.map((category, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: category, className: "category-admin-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-name" }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "category-admin-dot", style: { background: catColor(category) } }), /* @__PURE__ */ import_react2.default.createElement("span", null, category)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => moveCategory(category, -1), disabled: index === 0 }, "\u4E0A\u79FB"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => moveCategory(category, 1), disabled: index === data.categories.length - 1 }, "\u4E0B\u79FB"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => renameCategory(category) }, "\u91CD\u547D\u540D"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: () => removeCategory(category) }, "\u5220\u9664"))))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", onClick: addCategory }, "\u65B0\u589E\u5206\u7C7B"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u4F7F\u7528\u8BF4\u660E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "settings-note" }, /* @__PURE__ */ import_react2.default.createElement("p", null, "1. \u6570\u636E\u4F1A\u4F18\u5148\u5199\u5165\u670D\u52A1\u7AEF\uFF0C\u518D\u540C\u6B65\u5230\u5176\u4ED6\u8BBE\u5907\uFF0C\u8DE8\u7AEF\u4E00\u81F4\u6027\u4F1A\u6BD4 Gist \u65B9\u6848\u7A33\u5B9A\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "2. \u5982\u679C\u5176\u4ED6\u8BBE\u5907\u5DF2\u7ECF\u5199\u5165\u4E86\u65B0\u7248\u672C\uFF0C\u9876\u90E8\u4ECD\u4F1A\u63D0\u793A\u4F60\u51B3\u5B9A\u4FDD\u7559\u672C\u5730\u8FD8\u662F\u91C7\u7528\u670D\u52A1\u7AEF\u7248\u672C\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "3. \u5BFC\u5165\u3001\u91CD\u7F6E\u3001\u8986\u76D6\u670D\u52A1\u7AEF\u7248\u672C\u4E4B\u524D\uFF0C\u7CFB\u7EDF\u4ECD\u4F1A\u81EA\u52A8\u4FDD\u7559\u4E00\u4EFD\u672C\u5730\u5907\u4EFD\u3002")))), /* @__PURE__ */ import_react2.default.createElement(
+    ))))))), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: Boolean(archiveDetailTask), onClose: () => setArchiveDetailTask(null), title: archiveDetailTask ? `${archiveDetailTask.name} \xB7 \u5386\u53F2\u8BA1\u5212` : "\u5386\u53F2\u8BA1\u5212", width: 520 }, archiveDetailTask ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-detail-meta" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5206\u7C7B\uFF1A"), archiveDetailTask.category), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F52\u6863\u65F6\u95F4\uFF1A"), archiveDetailTask.archivedAt ? new Date(archiveDetailTask.archivedAt).toLocaleString() : "\u672A\u8BB0\u5F55"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u622A\u6B62\u65E5\u671F\uFF1A"), formatDeadline(archiveDetailTask) || "\u672A\u8BBE\u7F6E")), getArchivePlanDays(archiveDetailTask).length === 0 ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { padding: 20, textAlign: "center", color: "#bbb" } }, "\u8FD9\u4E2A\u4EFB\u52A1\u6CA1\u6709\u5386\u53F2\u8BA1\u5212\u8BB0\u5F55") : /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-list" }, getArchivePlanDays(archiveDetailTask).map(([day, items]) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${archiveDetailTask.id}-${day}`, className: "archive-plan-day" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-day-label" }, formatDateInput(day)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-items" }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${archiveDetailTask.id}-${day}-${index}`, className: "archive-plan-item" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-check ${item.done ? "done" : ""}` }, item.done ? "\u2713" : ""), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-copy" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-title ${item.done ? "done" : ""}` }, item.title || item.content.split("\n")[0]), item.title && item.content ? /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-detail ${item.done ? "done" : ""}` }, item.content) : null)))))))) : null), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showSettings, onClose: () => setShowSettings(false), title: "\u8BBE\u7F6E", width: 420 }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section", style: { marginTop: 0, paddingTop: 0, borderTop: "none" } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u2601\uFE0F \u670D\u52A1\u7AEF\u540C\u6B65"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u65B9\u5F0F\uFF1A"), "Alibaba Cloud API + MySQL"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F53\u524D\u5DE5\u4F5C\u7A7A\u95F4\uFF1A"), gistId), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u72B6\u6001\uFF1A"), syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u8FDE\u63A5\u5931\u8D25" : "\u540C\u6B65\u4E2D")), /* @__PURE__ */ import_react2.default.createElement("p", { className: "settings-note", style: { marginTop: 10 } }, "\u5F53\u524D\u7248\u672C\u4EE5\u670D\u52A1\u7AEF\u6570\u636E\u5E93\u4F5C\u4E3A\u552F\u4E00\u771F\u5B9E\u6570\u636E\u6E90\u3002\u672C\u5730 localStorage \u7EE7\u7EED\u4FDD\u7559\u7528\u4E8E\u7F13\u5B58\u548C\u5907\u4EFD\uFF0C\u4E0D\u518D\u4F7F\u7528 GitHub Gist \u4F5C\u4E3A\u4E3B\u540C\u6B65\u65B9\u5F0F\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: pullFromCloud }, "\u2193 \u4ECE\u670D\u52A1\u7AEF\u5237\u65B0"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: handleLogout }, "\u9000\u51FA\u767B\u5F55"))), isAdmin ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u8D26\u53F7\u7BA1\u7406"), /* @__PURE__ */ import_react2.default.createElement("form", { className: "admin-user-form", onSubmit: handleCreateAdminUser }, /* @__PURE__ */ import_react2.default.createElement(
+      "input",
+      {
+        className: "field-input",
+        value: adminUserForm.username,
+        onChange: (event) => setAdminUserForm((current) => ({ ...current, username: event.target.value })),
+        placeholder: "\u8D26\u53F7\uFF0C\u5982 zhangsan"
+      }
+    ), /* @__PURE__ */ import_react2.default.createElement(
+      "input",
+      {
+        className: "field-input",
+        value: adminUserForm.displayName,
+        onChange: (event) => setAdminUserForm((current) => ({ ...current, displayName: event.target.value })),
+        placeholder: "\u663E\u793A\u540D"
+      }
+    ), /* @__PURE__ */ import_react2.default.createElement(
+      "input",
+      {
+        className: "field-input",
+        type: "password",
+        value: adminUserForm.password,
+        onChange: (event) => setAdminUserForm((current) => ({ ...current, password: event.target.value })),
+        placeholder: "\u521D\u59CB\u5BC6\u7801\uFF0C\u81F3\u5C11 8 \u4F4D"
+      }
+    ), /* @__PURE__ */ import_react2.default.createElement(
+      "select",
+      {
+        className: "field-select",
+        value: adminUserForm.role,
+        onChange: (event) => setAdminUserForm((current) => ({ ...current, role: event.target.value }))
+      },
+      /* @__PURE__ */ import_react2.default.createElement("option", { value: "user" }, "\u666E\u901A\u7528\u6237"),
+      /* @__PURE__ */ import_react2.default.createElement("option", { value: "admin" }, "\u7BA1\u7406\u5458")
+    ), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", type: "submit" }, "\u521B\u5EFA\u8D26\u53F7")), /* @__PURE__ */ import_react2.default.createElement("div", { className: "admin-user-list" }, adminUsers.map((user) => /* @__PURE__ */ import_react2.default.createElement("div", { key: user.id, className: "admin-user-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "admin-user-main" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "admin-user-name" }, user.displayName || user.username), /* @__PURE__ */ import_react2.default.createElement("div", { className: "admin-user-meta" }, user.username, " \xB7 ", user.role === "admin" ? "\u7BA1\u7406\u5458" : "\u666E\u901A\u7528\u6237", " \xB7 ", user.isActive ? "\u542F\u7528" : "\u505C\u7528")), /* @__PURE__ */ import_react2.default.createElement("div", { className: "admin-user-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => switchWorkspaceUser(user) }, "\u5DE5\u4F5C\u53F0"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => handleResetUserPassword(user) }, "\u91CD\u7F6E\u5BC6\u7801"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: () => handleToggleUserActive(user), disabled: user.id === currentUser?.id }, user.isActive ? "\u505C\u7528" : "\u542F\u7528")))))) : null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u6570\u636E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-primary", onClick: exportData }, "\u{1F4E4} \u5BFC\u51FA"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => fileRef.current?.click() }, "\u{1F4E5} \u5BFC\u5165"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: resetDataWithBackup }, "\u{1F5D1} \u91CD\u7F6E"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u672C\u5730\u5907\u4EFD"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, backupInfo ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u6700\u8FD1\u5907\u4EFD\uFF1A"), new Date(backupInfo.savedAt).toLocaleString()), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u539F\u56E0\uFF1A"), backupInfo.reason)) : /* @__PURE__ */ import_react2.default.createElement("div", null, "\u5F53\u524D\u6CA1\u6709\u672C\u5730\u5907\u4EFD\u3002")), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: restoreBackup }, "\u6062\u590D\u6700\u8FD1\u5907\u4EFD"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u5206\u7C7B\u7BA1\u7406"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "settings-note" }, "\u5206\u7C7B\u987A\u5E8F\u4F1A\u540C\u6B65\u5230\u9876\u90E8\u6807\u7B7E\u680F\u548C\u65B0\u589E\u4EFB\u52A1\u8868\u5355\u3002\u5220\u9664\u5206\u7C7B\u65F6\uFF0C\u7CFB\u7EDF\u4F1A\u5148\u8981\u6C42\u4F60\u628A\u73B0\u6709\u4EFB\u52A1\u8FC1\u79FB\u5230\u5176\u4ED6\u5206\u7C7B\uFF0C\u4E0D\u4F1A\u76F4\u63A5\u4E22\u5931\u4EFB\u52A1\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-list" }, data.categories.map((category, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: category, className: "category-admin-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-name" }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "category-admin-dot", style: { background: catColor(category) } }), /* @__PURE__ */ import_react2.default.createElement("span", null, category)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "category-admin-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => moveCategory(category, -1), disabled: index === 0 }, "\u4E0A\u79FB"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => moveCategory(category, 1), disabled: index === data.categories.length - 1 }, "\u4E0B\u79FB"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => renameCategory(category) }, "\u91CD\u547D\u540D"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: () => removeCategory(category) }, "\u5220\u9664"))))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", onClick: addCategory }, "\u65B0\u589E\u5206\u7C7B"))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u4F7F\u7528\u8BF4\u660E"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "settings-note" }, /* @__PURE__ */ import_react2.default.createElement("p", null, "1. \u6570\u636E\u4F1A\u4F18\u5148\u5199\u5165\u670D\u52A1\u7AEF\uFF0C\u518D\u540C\u6B65\u5230\u5176\u4ED6\u8BBE\u5907\uFF0C\u8DE8\u7AEF\u4E00\u81F4\u6027\u4F1A\u6BD4 Gist \u65B9\u6848\u7A33\u5B9A\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "2. \u5982\u679C\u5176\u4ED6\u8BBE\u5907\u5DF2\u7ECF\u5199\u5165\u4E86\u65B0\u7248\u672C\uFF0C\u9876\u90E8\u4ECD\u4F1A\u63D0\u793A\u4F60\u51B3\u5B9A\u4FDD\u7559\u672C\u5730\u8FD8\u662F\u91C7\u7528\u670D\u52A1\u7AEF\u7248\u672C\u3002"), /* @__PURE__ */ import_react2.default.createElement("p", null, "3. \u5BFC\u5165\u3001\u91CD\u7F6E\u3001\u8986\u76D6\u670D\u52A1\u7AEF\u7248\u672C\u4E4B\u524D\uFF0C\u7CFB\u7EDF\u4ECD\u4F1A\u81EA\u52A8\u4FDD\u7559\u4E00\u4EFD\u672C\u5730\u5907\u4EFD\u3002")))), /* @__PURE__ */ import_react2.default.createElement(
       ConfirmDialog,
       {
         open: Boolean(confirmState),
