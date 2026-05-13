@@ -132,6 +132,13 @@ export async function updateAdminUser(userId, data) {
   return json.user;
 }
 
+export async function deleteAdminUser(userId) {
+  const json = await request(`/admin/users/${encodeURIComponent(userId)}`, {
+    method: "DELETE"
+  });
+  return json.user;
+}
+
 export async function resetAdminUserPassword(userId, password) {
   const json = await request(`/admin/users/${encodeURIComponent(userId)}/password`, {
     method: "POST",

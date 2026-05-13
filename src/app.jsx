@@ -25,6 +25,7 @@ import {
   clearSavedGistId,
   clearSessionToken,
   createAdminUser,
+  deleteAdminUser,
   getSavedGistId,
   getCurrentUser,
   getSessionToken,
@@ -350,6 +351,36 @@ function App() {
       console.error(error);
       pushToast("账号状态更新失败", "error");
     }
+  }
+
+  function handleDeleteAdminUser(user) {
+    if (user.id === currentUser?.id) {
+      pushToast("不能删除当前登录账号", "warning");
+      return;
+    }
+
+    askConfirm({
+      title: "删除账号",
+      message: `确认删除 ${user.displayName || user.username}？该账号的工作台数据、登录会话和相关通知会一并删除。`,
+      confirmLabel: "确认删除",
+      confirmTone: "danger",
+      onConfirm: async () => {
+        try {
+          await deleteAdminUser(user.id);
+          const users = await refreshAdminUsers();
+          await refreshMentionUsers();
+          if (workspaceUser?.id === user.id) {
+            switchWorkspaceUser(users.find((item) => item.id === currentUser?.id) || currentUser);
+          }
+          setConfirmState(null);
+          pushToast("账号已删除", "warning");
+        } catch (error) {
+          console.error(error);
+          setConfirmState(null);
+          pushToast(error.message || "账号删除失败", "error");
+        }
+      }
+    });
   }
 
   async function handleResetUserPassword(user) {
@@ -1661,6 +1692,9 @@ function App() {
                     <button className="btn btn-outline" onClick={() => handleResetUserPassword(user)}>重置密码</button>
                     <button className="btn btn-danger" onClick={() => handleToggleUserActive(user)} disabled={user.id === currentUser?.id}>
                       {user.isActive ? "停用" : "启用"}
+                    </button>
+                    <button className="btn btn-danger" onClick={() => handleDeleteAdminUser(user)} disabled={user.id === currentUser?.id}>
+                      删除
                     </button>
                   </div>
                 </div>

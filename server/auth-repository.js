@@ -295,6 +295,17 @@ export async function updateUser(userId, { displayName, role, isActive }) {
   return getUserById(userId);
 }
 
+export async function deleteUser(userId) {
+  const target = await getUserById(userId);
+  if (!target) {
+    throw Object.assign(new Error("User not found."), { code: "USER_NOT_FOUND" });
+  }
+
+  const pool = getDbPool();
+  await pool.query("DELETE FROM users WHERE id = ?", [userId]);
+  return target;
+}
+
 export async function resetUserPassword(userId, password) {
   validatePassword(password);
 

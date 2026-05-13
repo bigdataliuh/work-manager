@@ -9,6 +9,7 @@ import {
   createSession,
   createUser,
   deleteSession,
+  deleteUser,
   ensureAuthSchema,
   getSessionCookieOptions,
   getUserById,
@@ -226,6 +227,30 @@ app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (request, res
     }
 
     const user = await updateUser(userId, request.body || {});
+    response.json({ user });
+  } catch (error) {
+    if (error?.code === "USER_NOT_FOUND") {
+      response.status(404).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.delete("/api/admin/users/:id", requireAuth, requireAdmin, async (request, response, next) => {
+  try {
+    const userId = Number(request.params.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      response.status(400).json({ message: "Invalid user id." });
+      return;
+    }
+
+    if (userId === request.user.id) {
+      response.status(400).json({ message: "Cannot delete the current user." });
+      return;
+    }
+
+    const user = await deleteUser(userId);
     response.json({ user });
   } catch (error) {
     if (error?.code === "USER_NOT_FOUND") {
