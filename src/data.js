@@ -1,16 +1,19 @@
 export const STORAGE_KEY = "work-mgr-v3";
 export const BACKUP_KEY = "work-mgr-local-backup";
 
-export const CATEGORIES = ["项目", "商务", "开发", "日常任务", "临时任务", "机器人"];
+export const CATEGORIES = ["日常任务", "紧急任务", "临时事项", "行政商务流程"];
 export const STATUS_OPTIONS = ["进行中", "待启动", "已完成", "已搁置"];
 export const PRIORITY_OPTIONS = ["高", "中", "低"];
 export const DEADLINE_MODES = ["none", "date", "text"];
 
 export const CAT_COLORS = {
+  日常任务: "#0F766E",
+  紧急任务: "#C05046",
+  临时事项: "#BF8F00",
+  行政商务流程: "#2E75B6",
   项目: "#C05046",
   商务: "#2E75B6",
   开发: "#548235",
-  日常任务: "#0F766E",
   临时任务: "#BF8F00",
   机器人: "#7030A0"
 };

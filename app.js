@@ -21456,15 +21456,18 @@
   // src/data.js
   var STORAGE_KEY = "work-mgr-v3";
   var BACKUP_KEY = "work-mgr-local-backup";
-  var CATEGORIES = ["\u9879\u76EE", "\u5546\u52A1", "\u5F00\u53D1", "\u65E5\u5E38\u4EFB\u52A1", "\u4E34\u65F6\u4EFB\u52A1", "\u673A\u5668\u4EBA"];
+  var CATEGORIES = ["\u65E5\u5E38\u4EFB\u52A1", "\u7D27\u6025\u4EFB\u52A1", "\u4E34\u65F6\u4E8B\u9879", "\u884C\u653F\u5546\u52A1\u6D41\u7A0B"];
   var STATUS_OPTIONS = ["\u8FDB\u884C\u4E2D", "\u5F85\u542F\u52A8", "\u5DF2\u5B8C\u6210", "\u5DF2\u6401\u7F6E"];
   var PRIORITY_OPTIONS = ["\u9AD8", "\u4E2D", "\u4F4E"];
   var DEADLINE_MODES = ["none", "date", "text"];
   var CAT_COLORS = {
+    \u65E5\u5E38\u4EFB\u52A1: "#0F766E",
+    \u7D27\u6025\u4EFB\u52A1: "#C05046",
+    \u4E34\u65F6\u4E8B\u9879: "#BF8F00",
+    \u884C\u653F\u5546\u52A1\u6D41\u7A0B: "#2E75B6",
     \u9879\u76EE: "#C05046",
     \u5546\u52A1: "#2E75B6",
     \u5F00\u53D1: "#548235",
-    \u65E5\u5E38\u4EFB\u52A1: "#0F766E",
     \u4E34\u65F6\u4EFB\u52A1: "#BF8F00",
     \u673A\u5668\u4EBA: "#7030A0"
   };

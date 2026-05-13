@@ -4,12 +4,10 @@ import { createMentionNotifications } from "./notification-repository.js";
 
 const LEGACY_WORKSPACE_ROW_ID = 1;
 const DEFAULT_CATEGORIES = [
-  "\u9879\u76ee",
-  "\u5546\u52a1",
-  "\u5f00\u53d1",
   "\u65e5\u5e38\u4efb\u52a1",
-  "\u4e34\u65f6\u4efb\u52a1",
-  "\u673a\u5668\u4eba"
+  "\u7d27\u6025\u4efb\u52a1",
+  "\u4e34\u65f6\u4e8b\u9879",
+  "\u884c\u653f\u5546\u52a1\u6d41\u7a0b"
 ];
 
 function normalizeCategoryName(category) {
