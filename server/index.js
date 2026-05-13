@@ -13,11 +13,17 @@ import {
   getSessionCookieOptions,
   getUserById,
   getUserBySessionToken,
+  listActiveUsers,
   listUsers,
   readSessionCookie,
   resetUserPassword,
   updateUser
 } from "./auth-repository.js";
+import {
+  ensureNotificationSchema,
+  listNotifications,
+  markNotificationsRead
+} from "./notification-repository.js";
 import { ensureSchema, getStateRecord, migrateLegacyStateToAdmin, saveStateRecord } from "./state-repository.js";
 
 const app = express();
@@ -150,7 +156,7 @@ app.put("/api/state", requireAuth, async (request, response, next) => {
 
     const userId = await resolveStateUserId(request, response);
     if (!userId) return;
-    const saved = await saveStateRecord(userId, state, baseRevision);
+    const saved = await saveStateRecord(userId, state, baseRevision, { actorUserId: request.user.id });
     response.json(saved);
   } catch (error) {
     if (error?.code === "REVISION_CONFLICT") {
@@ -161,6 +167,31 @@ app.put("/api/state", requireAuth, async (request, response, next) => {
       return;
     }
 
+    next(error);
+  }
+});
+
+app.get("/api/users", requireAuth, async (_request, response, next) => {
+  try {
+    response.json({ users: await listActiveUsers() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/notifications", requireAuth, async (request, response, next) => {
+  try {
+    response.json(await listNotifications(request.user.id, { limit: request.query.limit }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/notifications/read", requireAuth, async (request, response, next) => {
+  try {
+    await markNotificationsRead(request.user.id, request.body?.ids);
+    response.json({ ok: true });
+  } catch (error) {
     next(error);
   }
 });
@@ -240,6 +271,7 @@ app.use((error, _request, response, _next) => {
 
 await ensureAuthSchema();
 await bootstrapAdminUser();
+await ensureNotificationSchema();
 await ensureSchema();
 await migrateLegacyStateToAdmin();
 

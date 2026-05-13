@@ -234,6 +234,14 @@ export async function listUsers() {
   return rows.map(publicUser);
 }
 
+export async function listActiveUsers() {
+  const pool = getDbPool();
+  const [rows] = await pool.query(
+    "SELECT * FROM users WHERE is_active = 1 ORDER BY display_name ASC, username ASC"
+  );
+  return rows.map(publicUser);
+}
+
 export async function getUserById(userId) {
   const pool = getDbPool();
   const [rows] = await pool.query("SELECT * FROM users WHERE id = ? LIMIT 1", [userId]);

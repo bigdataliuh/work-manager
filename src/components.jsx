@@ -58,6 +58,30 @@ export function Field({ label, value, onChange, placeholder, options, rows, type
   );
 }
 
+export function MentionPicker({ users = [], onMention }) {
+  const mentionableUsers = users.filter((user) => user?.username);
+  if (!mentionableUsers.length) return null;
+
+  return (
+    <div className="mention-picker">
+      <span className="mention-picker-label">@成员</span>
+      <div className="mention-picker-list">
+        {mentionableUsers.map((user) => (
+          <button
+            key={user.id}
+            type="button"
+            className="mention-chip"
+            onClick={() => onMention?.(user)}
+            title={`@${user.username}`}
+          >
+            {user.displayName || user.username}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function DeadlineField({ task, onChange }) {
   return (
     <div className="field">
@@ -341,7 +365,7 @@ export function MobileView({
   );
 }
 
-export function TaskForm({ task, setTask, categories }) {
+export function TaskForm({ task, setTask, categories, mentionUsers = [] }) {
   function updateField(key, value) {
     setTask((current) => ({ ...current, [key]: value }));
   }
@@ -360,6 +384,18 @@ export function TaskForm({ task, setTask, categories }) {
     setTask((current) => ({ ...current, deadlineMode: "text", deadlineDate: "", deadlineText: value || current.deadlineText }));
   }
 
+  function appendMention(user) {
+    const token = `@${user.username}`;
+    setTask((current) => {
+      const participants = String(current.participants || "");
+      if (participants.split(/\s+/).includes(token)) return current;
+      return {
+        ...current,
+        participants: participants ? `${participants} ${token}` : token
+      };
+    });
+  }
+
   return (
     <>
       <Field label="任务名称" value={task.name} onChange={(value) => updateField("name", value)} placeholder="如：朝天宫项目-现场测试" />
@@ -375,6 +411,7 @@ export function TaskForm({ task, setTask, categories }) {
         <DeadlineField task={task} onChange={updateDeadline} />
         <Field label="状态" value={task.status} onChange={(value) => updateField("status", value)} options={STATUS_OPTIONS} />
       </div>
+      <MentionPicker users={mentionUsers} onMention={appendMention} />
     </>
   );
 }

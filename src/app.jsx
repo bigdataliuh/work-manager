@@ -32,14 +32,17 @@ import {
   gistLoad,
   gistUpdate,
   listAdminUsers,
+  listMentionUsers,
+  listNotifications,
   login,
   logout,
+  markNotificationsRead,
   resetAdminUserPassword,
   setSavedGistId,
   setSessionToken,
   updateAdminUser
 } from "./sync.js";
-import { ConfirmDialog, Modal, MobileView, PBadge, SBadge, TaskForm, ToastStack } from "./components.jsx";
+import { ConfirmDialog, MentionPicker, Modal, MobileView, PBadge, SBadge, TaskForm, ToastStack } from "./components.jsx";
 
 function dataReducer(state, action) {
   switch (action.type) {
@@ -196,6 +199,10 @@ function App() {
   const [loginError, setLoginError] = useState("");
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminUserForm, setAdminUserForm] = useState({ username: "", displayName: "", password: "", role: "user" });
+  const [mentionUsers, setMentionUsers] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
   const fileRef = useRef(null);
   const syncTimerRef = useRef(null);
   const todayColRef = useRef(null);
@@ -220,6 +227,19 @@ function App() {
   }
 
   const isAdmin = currentUser?.role === "admin";
+
+  async function refreshMentionUsers() {
+    const users = await listMentionUsers();
+    setMentionUsers(users);
+    return users;
+  }
+
+  async function refreshNotifications() {
+    const result = await listNotifications();
+    setNotifications(result.notifications);
+    setUnreadNotifications(result.unreadCount);
+    return result;
+  }
 
   async function refreshAdminUsers() {
     if (!isAdmin) return [];
@@ -252,6 +272,8 @@ function App() {
       const user = await login(loginForm.username, loginForm.password);
       activateUserSession(user);
       setLoginForm({ username: "", password: "" });
+      await refreshMentionUsers();
+      await refreshNotifications();
       if (user.role === "admin") {
         const users = await listAdminUsers();
         setAdminUsers(users);
@@ -274,6 +296,10 @@ function App() {
     setCurrentUser(null);
     setWorkspaceUser(null);
     setAdminUsers([]);
+    setMentionUsers([]);
+    setNotifications([]);
+    setUnreadNotifications(0);
+    setShowNotifications(false);
     setGistToken("");
     setGistId("");
     setHasInitializedRemote(false);
@@ -340,6 +366,20 @@ function App() {
     }
   }
 
+  async function openNotifications() {
+    setShowNotifications(true);
+    try {
+      const result = await refreshNotifications();
+      if (result.unreadCount > 0) {
+        await markNotificationsRead();
+        await refreshNotifications();
+      }
+    } catch (error) {
+      console.error(error);
+      pushToast("通知加载失败", "error");
+    }
+  }
+
   useEffect(() => {
     let active = true;
 
@@ -347,6 +387,13 @@ function App() {
       .then(async (user) => {
         if (!active) return;
         activateUserSession(user);
+        const mentionableUsers = await listMentionUsers();
+        if (active) setMentionUsers(mentionableUsers);
+        const notificationResult = await listNotifications();
+        if (active) {
+          setNotifications(notificationResult.notifications);
+          setUnreadNotifications(notificationResult.unreadCount);
+        }
         if (user.role === "admin") {
           const users = await listAdminUsers();
           if (active) setAdminUsers(users);
@@ -370,6 +417,14 @@ function App() {
     }, 3200);
     return () => clearTimeout(timer);
   }, [toasts]);
+
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    const timer = window.setInterval(() => {
+      refreshNotifications().catch((error) => console.error(error));
+    }, 60000);
+    return () => window.clearInterval(timer);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     saveData(data);
@@ -518,6 +573,20 @@ function App() {
     return Object.entries(task.dailyActions || {})
       .filter(([, items]) => Array.isArray(items) && items.length)
       .sort(([left], [right]) => right.localeCompare(left));
+  }
+
+  function notificationActorLabel(notification) {
+    return notification.actorUser?.displayName || notification.actorUser?.username || "有人";
+  }
+
+  function notificationMeta(notification) {
+    const workspaceName = notification.workspaceUser?.displayName || notification.workspaceUser?.username || "";
+    const parts = [
+      notification.sourceType === "plan" ? "每日计划" : "任务",
+      notification.sourceMeta,
+      workspaceName ? `${workspaceName} 的工作台` : ""
+    ].filter(Boolean);
+    return parts.join(" · ");
   }
 
   function isActiveTask(task) {
@@ -747,6 +816,19 @@ function App() {
     setEditCell(null);
     setCellItems([{ title: "", content: "", done: false }]);
     pushToast(validItems.length ? "计划已保存" : "计划已清空");
+  }
+
+  function appendMentionToPlan(index, user) {
+    const token = `@${user.username}`;
+    setCellItems((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      const content = String(item.content || "");
+      if (content.split(/\s+/).includes(token)) return item;
+      return {
+        ...item,
+        content: content ? `${content} ${token}` : token
+      };
+    }));
   }
 
   function handleRolloverItem(taskId, day, index) {
@@ -1015,6 +1097,9 @@ function App() {
             <h1>{workspaceUser?.displayName || currentUser.displayName || currentUser.username}</h1>
             <div className="header-actions">
               {gistId ? <span className={`sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}`}>☁ {syncStatus === "ok" ? "已同步" : syncStatus === "error" ? "失败" : "同步中"}</span> : null}
+              <button className="btn btn-ghost notification-trigger" onClick={openNotifications}>
+                通知{unreadNotifications > 0 ? <span className="notification-badge">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span> : null}
+              </button>
               <button className="btn btn-ghost" onClick={() => setShowSettings(true)}>⚙</button>
               <button className="btn btn-ghost" onClick={() => setMobileDay(dateKey(new Date()))}>今日</button>
             </div>
@@ -1044,6 +1129,9 @@ function App() {
 
             <div className="header-actions">
               {gistId ? <span className={`sync-pill ${syncStatus === "ok" ? "ok" : syncStatus === "error" ? "error" : "syncing"}`}>☁ {syncStatus === "ok" ? "已同步" : syncStatus === "error" ? "失败" : "同步中"}</span> : null}
+              <button className="btn btn-ghost notification-trigger" onClick={openNotifications}>
+                通知{unreadNotifications > 0 ? <span className="notification-badge">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span> : null}
+              </button>
               {isAdmin && adminUsers.length ? (
                 <select
                   className="workspace-select"
@@ -1306,6 +1394,10 @@ function App() {
             <span className="mobile-bottom-icon">✓</span>
             <span>归档</span>
           </button>
+          <button className="mobile-bottom-btn" onClick={openNotifications}>
+            <span className="mobile-bottom-icon">＠</span>
+            <span>通知{unreadNotifications > 0 ? `(${unreadNotifications > 99 ? "99+" : unreadNotifications})` : ""}</span>
+          </button>
           <button className="mobile-bottom-btn mobile-bottom-btn-primary" onClick={() => setShowAdd(true)}>
             <span className="mobile-bottom-icon">＋</span>
             <span>新任务</span>
@@ -1318,14 +1410,14 @@ function App() {
       ) : null}
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="添加新任务">
-        <TaskForm task={newTask} setTask={setNewTask} categories={data.categories} />
+        <TaskForm task={newTask} setTask={setNewTask} categories={data.categories} mentionUsers={mentionUsers} />
         <button className="btn btn-dark btn-block" onClick={handleAddTask}>添加</button>
       </Modal>
 
       <Modal open={Boolean(editTask)} onClose={() => setEditTask(null)} title="编辑任务">
         {editTask ? (
           <>
-            <TaskForm task={editTask} setTask={setEditTask} categories={data.categories} />
+            <TaskForm task={editTask} setTask={setEditTask} categories={data.categories} mentionUsers={mentionUsers} />
             <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
               <button className="btn btn-dark" style={{ flex: 1, padding: 11, borderRadius: 10, fontSize: 14 }} onClick={handleSaveTaskEdit}>保存</button>
               <button className="btn btn-success" style={{ padding: "11px 16px", borderRadius: 10, fontSize: 14 }} onClick={() => dispatch({ type: "archiveTask", id: editTask.id })}>完结归档</button>
@@ -1381,6 +1473,7 @@ function App() {
                     value={item.content}
                     onChange={(event) => setCellItems((current) => current.map((it, itemIndex) => (itemIndex === index ? { ...it, content: event.target.value } : it)))}
                   />
+                  <MentionPicker users={mentionUsers} onMention={(user) => appendMentionToPlan(index, user)} />
                 </div>
               ))}
             </div>
@@ -1633,6 +1726,24 @@ function App() {
             <p>2. 如果其他设备已经写入了新版本，顶部仍会提示你决定保留本地还是采用服务端版本。</p>
             <p>3. 导入、重置、覆盖服务端版本之前，系统仍会自动保留一份本地备份。</p>
           </div>
+        </div>
+      </Modal>
+
+      <Modal open={showNotifications} onClose={() => setShowNotifications(false)} title="通知" width={460}>
+        <div className="notification-panel">
+          {notifications.length === 0 ? (
+            <div className="notification-empty">暂无通知</div>
+          ) : notifications.map((notification) => (
+            <div key={notification.id} className={`notification-item ${notification.readAt ? "" : "unread"}`}>
+              <div className="notification-item-head">
+                <span>{notificationActorLabel(notification)} 提到了你</span>
+                <time>{notification.createdAt ? new Date(notification.createdAt).toLocaleString() : ""}</time>
+              </div>
+              <div className="notification-item-title">{notification.sourceTitle}</div>
+              {notification.sourceContent ? <div className="notification-item-content">{notification.sourceContent}</div> : null}
+              <div className="notification-item-meta">{notificationMeta(notification)}</div>
+            </div>
+          ))}
         </div>
       </Modal>
 

@@ -111,6 +111,11 @@ export async function listAdminUsers() {
   return json.users || [];
 }
 
+export async function listMentionUsers() {
+  const json = await request("/users");
+  return json.users || [];
+}
+
 export async function createAdminUser(data) {
   const json = await request("/admin/users", {
     method: "POST",
@@ -133,6 +138,21 @@ export async function resetAdminUserPassword(userId, password) {
     body: JSON.stringify({ password })
   });
   return json.user;
+}
+
+export async function listNotifications(limit = 50) {
+  const json = await request(`/notifications?limit=${encodeURIComponent(limit)}`);
+  return {
+    notifications: json.notifications || [],
+    unreadCount: Number(json.unreadCount || 0)
+  };
+}
+
+export async function markNotificationsRead(ids = []) {
+  await request("/notifications/read", {
+    method: "POST",
+    body: JSON.stringify({ ids })
+  });
 }
 
 export async function gistCreate(_token, data) {

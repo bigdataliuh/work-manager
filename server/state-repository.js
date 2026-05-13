@@ -1,5 +1,6 @@
 import { getFirstAdminUser } from "./auth-repository.js";
 import { getDbPool } from "./db.js";
+import { createMentionNotifications } from "./notification-repository.js";
 
 const LEGACY_WORKSPACE_ROW_ID = 1;
 const DEFAULT_CATEGORIES = [
@@ -132,7 +133,7 @@ export async function getStateRecord(userId) {
   };
 }
 
-export async function saveStateRecord(userId, state, baseRevision) {
+export async function saveStateRecord(userId, state, baseRevision, { actorUserId = userId } = {}) {
   const pool = getDbPool();
   const connection = await pool.getConnection();
 
@@ -145,6 +146,7 @@ export async function saveStateRecord(userId, state, baseRevision) {
     );
 
     const normalizedState = normalizeStateShape(state);
+    const previousState = rows.length ? normalizeStateShape(JSON.parse(rows[0].data_json)) : normalizeStateShape(null);
 
     if (!rows.length) {
       if (baseRevision && Number(baseRevision) !== 0) {
@@ -162,6 +164,12 @@ export async function saveStateRecord(userId, state, baseRevision) {
         "INSERT INTO user_states (user_id, data_json, revision) VALUES (?, ?, 1)",
         [userId, JSON.stringify(normalizedState)]
       );
+      await createMentionNotifications(connection, {
+        actorUserId,
+        workspaceUserId: userId,
+        beforeState: previousState,
+        afterState: normalizedState
+      });
 
       await connection.commit();
       return {
@@ -178,7 +186,7 @@ export async function saveStateRecord(userId, state, baseRevision) {
       throw Object.assign(new Error("Revision conflict"), {
         code: "REVISION_CONFLICT",
         latest: {
-          state: normalizeStateShape(JSON.parse(currentRow.data_json)),
+          state: previousState,
           revision: currentRevision,
           updatedAt: currentRow.updated_at ? new Date(currentRow.updated_at).toISOString() : null
         }
@@ -190,6 +198,12 @@ export async function saveStateRecord(userId, state, baseRevision) {
       "UPDATE user_states SET data_json = ?, revision = ? WHERE user_id = ?",
       [JSON.stringify(normalizedState), nextRevision, userId]
     );
+    await createMentionNotifications(connection, {
+      actorUserId,
+      workspaceUserId: userId,
+      beforeState: previousState,
+      afterState: normalizedState
+    });
 
     await connection.commit();
     return {
