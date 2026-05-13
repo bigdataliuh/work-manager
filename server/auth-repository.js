@@ -158,6 +158,8 @@ export async function getFirstAdminUser() {
 }
 
 export async function authenticateUser(usernameInput, password) {
+  if (typeof password !== "string") return null;
+
   const username = normalizeUsername(usernameInput);
   const pool = getDbPool();
   const [rows] = await pool.query("SELECT * FROM users WHERE username = ? LIMIT 1", [username]);

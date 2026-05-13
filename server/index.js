@@ -213,6 +213,13 @@ app.post("/api/admin/users/:id/password", requireAuth, requireAdmin, async (requ
 
 app.use((error, _request, response, _next) => {
   console.error(error);
+  if (error?.status && error.status < 500) {
+    response.status(error.status).json({
+      message: error.message || "Bad request."
+    });
+    return;
+  }
+
   response.status(500).json({
     message: "Internal server error."
   });
