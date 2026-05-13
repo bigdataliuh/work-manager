@@ -5,6 +5,7 @@ export const CATEGORIES = ["日常任务", "紧急任务", "临时事项", "行�
 export const STATUS_OPTIONS = ["进行中", "待启动", "已完成", "已搁置"];
 export const PRIORITY_OPTIONS = ["高", "中", "低"];
 export const DEADLINE_MODES = ["none", "date", "text"];
+export const PLAN_ITEM_STATUSES = ["pending", "done", "waiting", "canceled"];
 
 export const CAT_COLORS = {
   日常任务: "#0F766E",
@@ -152,18 +153,26 @@ function normalizePlanItem(item) {
   if (!item) return null;
   if (typeof item === "string") {
     const content = item.trim();
-    return content ? { title: "", content, done: false } : null;
+    return content ? { title: "", content, done: false, status: "pending" } : null;
   }
 
   const title = typeof item.title === "string" ? item.title.trim() : "";
   const content = typeof item.content === "string" ? item.content.trim() : "";
   if (!title && !content) return null;
+  const status = PLAN_ITEM_STATUSES.includes(item.status) ? item.status : (item.done ? "done" : "pending");
 
-  return {
+  const normalized = {
     title,
     content,
-    done: Boolean(item.done)
+    done: status === "done",
+    status
   };
+
+  if (typeof item.handledAt === "string") normalized.handledAt = item.handledAt;
+  if (typeof item.handledReason === "string") normalized.handledReason = item.handledReason;
+  if (typeof item.deferredFrom === "string") normalized.deferredFrom = item.deferredFrom;
+
+  return normalized;
 }
 
 function normalizeDailyActions(dailyActions = {}) {
@@ -296,9 +305,11 @@ export function updateTimestamp(data) {
   };
 }
 
-export function getCellItems(task, day) {
+export function getCellItems(task, day, { includeCanceled = false } = {}) {
   const raw = task.dailyActions?.[day];
   if (!raw) return null;
-  const normalized = Array.isArray(raw) ? raw.map(normalizePlanItem).filter(Boolean) : [normalizePlanItem(raw)].filter(Boolean);
+  const normalized = (Array.isArray(raw) ? raw.map(normalizePlanItem) : [normalizePlanItem(raw)])
+    .filter(Boolean)
+    .filter((item) => includeCanceled || item.status !== "canceled");
   return normalized.length ? normalized : null;
 }

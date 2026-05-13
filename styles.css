@@ -1270,6 +1270,8 @@ textarea {
 .plan-editor-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-top: 8px;
 }
 

@@ -116,30 +116,51 @@ function dataReducer(state, action) {
         ...state,
         tasks: state.tasks.map((task) => {
           if (task.id !== action.taskId) return task;
-          const items = getCellItems(task, action.day);
-          if (!items || !items[action.index]) return task;
-          const nextItems = items.map((item, index) => (index === action.index ? { ...item, done: !item.done } : item));
+          const allItems = getCellItems(task, action.day, { includeCanceled: true });
+          const visibleIndexes = allItems
+            ?.map((item, index) => (item.status === "canceled" ? -1 : index))
+            .filter((index) => index >= 0);
+          const targetIndex = visibleIndexes?.[action.index];
+          if (!allItems || targetIndex === undefined) return task;
+          const nextItems = allItems.map((item, index) => {
+            if (index !== targetIndex) return item;
+            const nextDone = item.status !== "done";
+            return {
+              ...item,
+              done: nextDone,
+              status: nextDone ? "done" : "pending",
+              handledAt: nextDone ? new Date().toISOString() : item.handledAt,
+              handledReason: nextDone ? "marked_done" : ""
+            };
+          });
           return { ...task, dailyActions: { ...task.dailyActions, [action.day]: nextItems } };
         })
       });
 
-    case "rolloverItem": {
-      const nextDay = getNextDayKey(action.day);
-      if (!nextDay) return state;
+    case "moveCellItem": {
+      const targetDay = action.targetDay || getNextDayKey(action.day);
+      if (!targetDay) return state;
 
       return updateTimestamp({
         ...state,
         tasks: state.tasks.map((task) => {
           if (task.id !== action.taskId) return task;
-          const items = getCellItems(task, action.day);
+          const items = action.items || getCellItems(task, action.day, { includeCanceled: true });
           if (!items || !items[action.index]) return task;
 
-          const itemToMove = { ...items[action.index], done: false };
+          const itemToMove = {
+            ...items[action.index],
+            done: false,
+            status: "pending",
+            handledAt: new Date().toISOString(),
+            handledReason: action.reason || "deferred",
+            deferredFrom: action.day
+          };
           const remainingItems = items.filter((_, index) => index !== action.index);
-          const nextDayItems = getCellItems(task, nextDay) || [];
+          const targetDayItems = getCellItems(task, targetDay, { includeCanceled: true }) || [];
           const nextDailyActions = {
             ...task.dailyActions,
-            [nextDay]: [...nextDayItems, itemToMove]
+            [targetDay]: [...targetDayItems, itemToMove]
           };
 
           if (remainingItems.length) nextDailyActions[action.day] = remainingItems;
@@ -162,6 +183,29 @@ function getNextDayKey(day) {
   return dateKey(date);
 }
 
+function normalizeCellItemsForSave(items = []) {
+  return items
+    .map((item) => {
+      const title = String(item.title || "").trim();
+      const content = String(item.content || "").trim();
+      if (!title && !content) return null;
+      const status = ["pending", "done", "waiting", "canceled"].includes(item.status)
+        ? item.status
+        : (item.done ? "done" : "pending");
+      const normalized = {
+        title,
+        content,
+        done: status === "done",
+        status
+      };
+      if (typeof item.handledAt === "string" && item.handledAt) normalized.handledAt = item.handledAt;
+      if (typeof item.handledReason === "string" && item.handledReason) normalized.handledReason = item.handledReason;
+      if (typeof item.deferredFrom === "string" && item.deferredFrom) normalized.deferredFrom = item.deferredFrom;
+      return normalized;
+    })
+    .filter(Boolean);
+}
+
 function createToast(message, type = "success") {
   return { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), message, type };
 }
@@ -180,7 +224,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [editCell, setEditCell] = useState(null);
-  const [cellItems, setCellItems] = useState([{ title: "", content: "", done: false }]);
+  const [cellItems, setCellItems] = useState([{ title: "", content: "", done: false, status: "pending" }]);
   const [expandedCell, setExpandedCell] = useState(null);
   const [newTask, setNewTask] = useState(() => createEmptyTask());
   const [gistToken, setGistToken] = useState("");
@@ -429,6 +473,13 @@ function App() {
     return levelLabels[user.adminLevel] || "三级管理员";
   }
 
+  function planItemStatusLabel(item) {
+    if (item.status === "done" || item.done) return "已完成";
+    if (item.status === "waiting") return "待跟进";
+    if (item.status === "canceled") return "已取消";
+    return "待办";
+  }
+
   async function openNotifications() {
     setShowNotifications(true);
     try {
@@ -657,8 +708,9 @@ function App() {
   }
 
   function getLatestPlanSummary(task) {
-    const entries = Object.entries(task.dailyActions || {})
-      .filter(([, items]) => Array.isArray(items) && items.length)
+    const entries = Object.keys(task.dailyActions || {})
+      .map((day) => [day, getCellItems(task, day)])
+      .filter(([, items]) => items?.length)
       .sort(([left], [right]) => right.localeCompare(left));
     if (!entries.length) return "";
     const [, items] = entries[0];
@@ -667,8 +719,9 @@ function App() {
   }
 
   function getArchivePlanDays(task) {
-    return Object.entries(task.dailyActions || {})
-      .filter(([, items]) => Array.isArray(items) && items.length)
+    return Object.keys(task.dailyActions || {})
+      .map((day) => [day, getCellItems(task, day, { includeCanceled: true })])
+      .filter(([, items]) => items?.length)
       .sort(([left], [right]) => right.localeCompare(left));
   }
 
@@ -714,8 +767,8 @@ function App() {
         task.responsible.toLowerCase().includes(query) ||
         task.participants.toLowerCase().includes(query) ||
         formatDeadline(task).toLowerCase().includes(query) ||
-        Object.values(task.dailyActions).some((items) =>
-          Array.isArray(items) && items.some((item) => item.title.toLowerCase().includes(query) || item.content.toLowerCase().includes(query))
+        Object.keys(task.dailyActions || {}).some((day) =>
+          getCellItems(task, day)?.some((item) => item.title.toLowerCase().includes(query) || item.content.toLowerCase().includes(query))
         )
       );
     })
@@ -738,7 +791,10 @@ function App() {
         task.name.toLowerCase().includes(query) ||
         task.responsible.toLowerCase().includes(query) ||
         task.participants.toLowerCase().includes(query) ||
-        formatDeadline(task).toLowerCase().includes(query)
+        formatDeadline(task).toLowerCase().includes(query) ||
+        Object.keys(task.dailyActions || {}).some((day) =>
+          getCellItems(task, day)?.some((item) => item.title.toLowerCase().includes(query) || item.content.toLowerCase().includes(query))
+        )
       );
     })
   );
@@ -913,17 +969,11 @@ function App() {
 
   function handleSaveCellEdit() {
     if (!editCell) return;
-    const validItems = cellItems
-      .map((item) => ({
-        title: item.title.trim(),
-        content: item.content.trim(),
-        done: Boolean(item.done)
-      }))
-      .filter((item) => item.title || item.content);
+    const validItems = normalizeCellItemsForSave(cellItems);
 
     dispatch({ type: "saveCellItems", taskId: editCell.taskId, day: editCell.day, items: validItems });
     setEditCell(null);
-    setCellItems([{ title: "", content: "", done: false }]);
+    setCellItems([{ title: "", content: "", done: false, status: "pending" }]);
     pushToast(validItems.length ? "计划已保存" : "计划已清空");
   }
 
@@ -940,10 +990,64 @@ function App() {
     }));
   }
 
-  function handleRolloverItem(taskId, day, index) {
-    dispatch({ type: "rolloverItem", taskId, day, index });
-    setExpandedCell(null);
-    pushToast("未完成计划已平移到次日", "warning");
+  function updateCellItemStatus(index, status) {
+    const handledAt = new Date().toISOString();
+    setCellItems((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      return {
+        ...item,
+        done: status === "done",
+        status,
+        handledAt,
+        handledReason: status
+      };
+    }));
+  }
+
+  function moveCellItemFromEditor(index, targetDay, reason) {
+    if (!editCell) return;
+    if (targetDay === editCell.day) {
+      pushToast("目标日期不能和当前日期相同", "warning");
+      return;
+    }
+    const normalizedEntries = cellItems
+      .map((item, originalIndex) => ({ item: normalizeCellItemsForSave([item])[0], originalIndex }))
+      .filter((entry) => entry.item);
+    const normalizedIndex = normalizedEntries.findIndex((entry) => entry.originalIndex === index);
+    if (normalizedIndex < 0) {
+      pushToast("请先填写计划内容", "warning");
+      return;
+    }
+    dispatch({
+      type: "moveCellItem",
+      taskId: editCell.taskId,
+      day: editCell.day,
+      targetDay,
+      index: normalizedIndex,
+      items: normalizedEntries.map((entry) => entry.item),
+      reason
+    });
+    setCellItems((current) => {
+      const next = current.filter((_, itemIndex) => itemIndex !== index);
+      return next.length ? next : [{ title: "", content: "", done: false, status: "pending" }];
+    });
+    pushToast(targetDay === getNextDayKey(editCell.day) ? "计划已顺延到明天" : "计划已改期");
+  }
+
+  function deferCellItemToTomorrow(index) {
+    if (!editCell) return;
+    moveCellItemFromEditor(index, getNextDayKey(editCell.day), "deferred_tomorrow");
+  }
+
+  function deferCellItemToDate(index) {
+    if (!editCell) return;
+    const targetDay = window.prompt("输入新的日期，格式为 YYYY-MM-DD", getNextDayKey(editCell.day));
+    if (!targetDay) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDay) || Number.isNaN(new Date(`${targetDay}T00:00:00`).getTime())) {
+      pushToast("日期格式不正确", "warning");
+      return;
+    }
+    moveCellItemFromEditor(index, targetDay, "deferred_date");
   }
 
   function handleImportFile(event) {
@@ -1284,7 +1388,6 @@ function App() {
           setFilterCat={setFilterCat}
           getCellItems={getCellItems}
           onToggleItemDone={(taskId, day, index) => dispatch({ type: "toggleItemDone", taskId, day, index })}
-          onRolloverItem={handleRolloverItem}
           onEditTask={setEditTask}
           onEditCell={setEditCell}
           setCellItems={setCellItems}
@@ -1354,6 +1457,7 @@ function App() {
                     {days.map((date) => {
                       const day = dateKey(date);
                       const items = getCellItems(task, day);
+                      const allItems = getCellItems(task, day, { includeCanceled: true });
                       const expandedKey = `${task.id}-${day}`;
                       const isExpanded = expandedCell === expandedKey;
                       return (
@@ -1367,7 +1471,7 @@ function App() {
                               setExpandedCell(expandedKey);
                             } else {
                               setEditCell({ taskId: task.id, day });
-                              setCellItems([{ title: "", content: "", done: false }]);
+                              setCellItems(allItems?.length ? allItems.map((item) => ({ ...item })) : [{ title: "", content: "", done: false, status: "pending" }]);
                             }
                           }}
                         >
@@ -1379,8 +1483,7 @@ function App() {
                                     <div key={`${expandedKey}-${index}`}>
                                       {renderCompactPlanItem(
                                         item,
-                                        () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }),
-                                        () => handleRolloverItem(task.id, day, index)
+                                        () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index })
                                       )}
                                     </div>
                                   ))}
@@ -1397,16 +1500,9 @@ function App() {
                                           title: item.done ? "取消完成" : "标记完成",
                                           onClick: () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index })
                                         })}
-                                        {renderPlanActionButton({
-                                          label: "×",
-                                          active: false,
-                                          activeColor: "#ef4444",
-                                          title: "未完成，平移到次日",
-                                          onClick: () => handleRolloverItem(task.id, day, index)
-                                        })}
                                       </div>
-                                      <div style={{ opacity: item.done ? 0.5 : 1 }}>
-                                        {item.title ? <div style={{ fontWeight: 600, fontSize: 12, color: "#333", marginBottom: 2, textDecoration: item.done ? "line-through" : "none" }}>{item.title}</div> : null}
+                                      <div style={{ opacity: item.done || item.status === "waiting" ? 0.5 : 1 }}>
+                                        {item.title ? <div style={{ fontWeight: 600, fontSize: 12, color: "#333", marginBottom: 2, textDecoration: item.done ? "line-through" : "none" }}>{item.title}{item.status === "waiting" ? " · 待跟进" : ""}</div> : null}
                                         {item.content ? <div className="cell-expanded-text" style={{ textDecoration: item.done ? "line-through" : "none" }}>{item.content}</div> : null}
                                       </div>
                                     </div>
@@ -1417,7 +1513,7 @@ function App() {
                                       style={{ fontSize: 11, padding: "3px 10px" }}
                                       onClick={() => {
                                         setEditCell({ taskId: task.id, day });
-                                        setCellItems(items.map((item) => ({ ...item })));
+                                        setCellItems((allItems || items).map((item) => ({ ...item })));
                                         setExpandedCell(null);
                                       }}
                                     >
@@ -1453,6 +1549,7 @@ function App() {
                       {days.map((date) => {
                         const day = dateKey(date);
                         const items = getCellItems(task, day);
+                        const allItems = getCellItems(task, day, { includeCanceled: true });
                         return (
                           <div
                             key={`${task.id}-${day}`}
@@ -1460,7 +1557,7 @@ function App() {
                             onClick={() => {
                               if (!items) {
                                 setEditCell({ taskId: task.id, day });
-                                setCellItems([{ title: "", content: "", done: false }]);
+                                setCellItems(allItems?.length ? allItems.map((item) => ({ ...item })) : [{ title: "", content: "", done: false, status: "pending" }]);
                               }
                             }}
                           >
@@ -1470,8 +1567,7 @@ function App() {
                                   <div key={`${task.id}-${day}-silent-${index}`}>
                                     {renderCompactPlanItem(
                                       item,
-                                      () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }),
-                                      () => handleRolloverItem(task.id, day, index)
+                                      () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index })
                                     )}
                                   </div>
                                 ))}
@@ -1556,7 +1652,7 @@ function App() {
         ) : null}
       </Modal>
 
-      <Modal open={Boolean(editCell)} onClose={() => { setEditCell(null); setCellItems([{ title: "", content: "", done: false }]); }} title="编辑当日计划" width={420}>
+      <Modal open={Boolean(editCell)} onClose={() => { setEditCell(null); setCellItems([{ title: "", content: "", done: false, status: "pending" }]); }} title="编辑当日计划" width={420}>
         {editCell ? (
           <>
             <div style={{ fontSize: 12, color: "#999", marginBottom: 12 }}>
@@ -1564,9 +1660,9 @@ function App() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {cellItems.map((item, index) => (
-                <div key={`editor-${index}`} className="plan-editor-card">
+                <div key={`editor-${index}`} className="plan-editor-card" style={item.status === "canceled" ? { opacity: 0.65 } : undefined}>
                   <div className="plan-editor-head">
-                    <span className="plan-editor-title">计划 {index + 1}</span>
+                    <span className="plan-editor-title">计划 {index + 1} · {planItemStatusLabel(item)}</span>
                     {cellItems.length > 1 ? (
                       <button className="ghost-icon-btn" onClick={() => setCellItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button>
                     ) : null}
@@ -1591,10 +1687,23 @@ function App() {
                       <button className="btn btn-outline" onClick={() => handleCompleteMentionPlan(index)}>任务已完成</button>
                     </div>
                   ) : null}
+                  <div className="plan-editor-actions">
+                    <button className="btn btn-outline" onClick={() => updateCellItemStatus(index, item.status === "done" || item.done ? "pending" : "done")}>
+                      {item.status === "done" || item.done ? "恢复待办" : "标记完成"}
+                    </button>
+                    <button className="btn btn-outline" onClick={() => deferCellItemToTomorrow(index)}>顺延到明天</button>
+                    <button className="btn btn-outline" onClick={() => deferCellItemToDate(index)}>改到指定日期</button>
+                    <button className="btn btn-outline" onClick={() => updateCellItemStatus(index, item.status === "waiting" ? "pending" : "waiting")}>
+                      {item.status === "waiting" ? "恢复待办" : "设为待跟进"}
+                    </button>
+                    <button className="btn btn-danger" onClick={() => updateCellItemStatus(index, item.status === "canceled" ? "pending" : "canceled")}>
+                      {item.status === "canceled" ? "恢复待办" : "取消此项"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
-            <button className="plan-add-btn" onClick={() => setCellItems((current) => [...current, { title: "", content: "", done: false }])}>+ 添加计划</button>
+            <button className="plan-add-btn" onClick={() => setCellItems((current) => [...current, { title: "", content: "", done: false, status: "pending" }])}>+ 添加计划</button>
             <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
               <button className="btn btn-dark" style={{ flex: 1, padding: 11, borderRadius: 10, fontSize: 14 }} onClick={handleSaveCellEdit}>保存</button>
               <button
@@ -1603,7 +1712,7 @@ function App() {
                 onClick={() => {
                   dispatch({ type: "saveCellItems", taskId: editCell.taskId, day: editCell.day, items: [] });
                   setEditCell(null);
-                  setCellItems([{ title: "", content: "", done: false }]);
+                  setCellItems([{ title: "", content: "", done: false, status: "pending" }]);
                   pushToast("计划已清除", "warning");
                 }}
               >
@@ -1698,10 +1807,12 @@ function App() {
                     <div className="archive-plan-items">
                       {items.map((item, index) => (
                         <div key={`${archiveDetailTask.id}-${day}-${index}`} className="archive-plan-item">
-                          <div className={`archive-plan-check ${item.done ? "done" : ""}`}>{item.done ? "✓" : ""}</div>
+                          <div className={`archive-plan-check ${item.done ? "done" : ""}`}>{item.done ? "✓" : item.status === "canceled" ? "×" : ""}</div>
                           <div className="archive-plan-copy">
-                            <div className={`archive-plan-title ${item.done ? "done" : ""}`}>{item.title || item.content.split("\n")[0]}</div>
-                            {item.title && item.content ? <div className={`archive-plan-detail ${item.done ? "done" : ""}`}>{item.content}</div> : null}
+                            <div className={`archive-plan-title ${item.done || item.status === "canceled" ? "done" : ""}`}>
+                              {item.title || item.content.split("\n")[0]}{item.status === "waiting" ? " · 待跟进" : item.status === "canceled" ? " · 已取消" : ""}
+                            </div>
+                            {item.title && item.content ? <div className={`archive-plan-detail ${item.done || item.status === "canceled" ? "done" : ""}`}>{item.content}</div> : null}
                           </div>
                         </div>
                       ))}
@@ -1908,8 +2019,9 @@ function App() {
   );
 }
 
-function renderCompactPlanItem(item, onToggle, onRollover) {
+function renderCompactPlanItem(item, onToggle) {
   const label = item.title || item.content.split("\n")[0];
+  const muted = item.done || item.status === "waiting";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       {renderPlanActionButton({
@@ -1919,25 +2031,18 @@ function renderCompactPlanItem(item, onToggle, onRollover) {
         title: item.done ? "取消完成" : "标记完成",
         onClick: onToggle
       })}
-      {renderPlanActionButton({
-        label: "×",
-        active: false,
-        activeColor: "#ef4444",
-        title: "未完成，平移到次日",
-        onClick: onRollover
-      })}
       <span
         style={{
           fontSize: 12,
           lineHeight: 1.4,
-          color: item.done ? "#aaa" : "#333",
+          color: muted ? "#aaa" : "#333",
           textDecoration: item.done ? "line-through" : "none",
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap"
         }}
       >
-        {label}
+        {label}{item.status === "waiting" ? " · 待跟进" : ""}
       </span>
     </div>
   );
@@ -1959,7 +2064,7 @@ function renderPlanActionButton({ label, active, activeColor, title, onClick }) 
         borderRadius: 3,
         border: `1.5px solid ${active ? activeColor : "#ccc"}`,
         background: active ? activeColor : "transparent",
-        color: active ? "#fff" : activeColor,
+        color: "#fff",
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
@@ -1970,7 +2075,7 @@ function renderPlanActionButton({ label, active, activeColor, title, onClick }) 
         fontWeight: 700
       }}
     >
-      {active || label === "×" ? label : ""}
+      {active ? label : ""}
     </button>
   );
 }

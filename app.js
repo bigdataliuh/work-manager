@@ -21460,6 +21460,7 @@
   var STATUS_OPTIONS = ["\u8FDB\u884C\u4E2D", "\u5F85\u542F\u52A8", "\u5DF2\u5B8C\u6210", "\u5DF2\u6401\u7F6E"];
   var PRIORITY_OPTIONS = ["\u9AD8", "\u4E2D", "\u4F4E"];
   var DEADLINE_MODES = ["none", "date", "text"];
+  var PLAN_ITEM_STATUSES = ["pending", "done", "waiting", "canceled"];
   var CAT_COLORS = {
     \u65E5\u5E38\u4EFB\u52A1: "#0F766E",
     \u7D27\u6025\u4EFB\u52A1: "#C05046",
@@ -21576,16 +21577,22 @@
     if (!item) return null;
     if (typeof item === "string") {
       const content2 = item.trim();
-      return content2 ? { title: "", content: content2, done: false } : null;
+      return content2 ? { title: "", content: content2, done: false, status: "pending" } : null;
     }
     const title = typeof item.title === "string" ? item.title.trim() : "";
     const content = typeof item.content === "string" ? item.content.trim() : "";
     if (!title && !content) return null;
-    return {
+    const status = PLAN_ITEM_STATUSES.includes(item.status) ? item.status : item.done ? "done" : "pending";
+    const normalized = {
       title,
       content,
-      done: Boolean(item.done)
+      done: status === "done",
+      status
     };
+    if (typeof item.handledAt === "string") normalized.handledAt = item.handledAt;
+    if (typeof item.handledReason === "string") normalized.handledReason = item.handledReason;
+    if (typeof item.deferredFrom === "string") normalized.deferredFrom = item.deferredFrom;
+    return normalized;
   }
   function normalizeDailyActions(dailyActions = {}) {
     const next = {};
@@ -21700,10 +21707,10 @@
       _lastModified: Date.now()
     };
   }
-  function getCellItems(task, day) {
+  function getCellItems(task, day, { includeCanceled = false } = {}) {
     const raw = task.dailyActions?.[day];
     if (!raw) return null;
-    const normalized = Array.isArray(raw) ? raw.map(normalizePlanItem).filter(Boolean) : [normalizePlanItem(raw)].filter(Boolean);
+    const normalized = (Array.isArray(raw) ? raw.map(normalizePlanItem) : [normalizePlanItem(raw)]).filter(Boolean).filter((item) => includeCanceled || item.status !== "canceled");
     return normalized.length ? normalized : null;
   }
 
@@ -22007,8 +22014,9 @@
       }
     ) : null, task.deadlineMode === "none" ? /* @__PURE__ */ import_react.default.createElement("div", { className: "field-help" }, "\u4E0D\u8BBE\u7F6E\u622A\u6B62\u65F6\u95F4\u3002") : null);
   }
-  function renderMobilePlanItem(item, onToggle, onRollover) {
+  function renderMobilePlanItem(item, onToggle) {
     const label = item.title || item.content.split("\n")[0];
+    const muted = item.done || item.status === "waiting";
     return /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-row" }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-actions" }, /* @__PURE__ */ import_react.default.createElement(
       "button",
       {
@@ -22018,29 +22026,20 @@
         "aria-label": item.done ? "\u53D6\u6D88\u5B8C\u6210" : "\u6807\u8BB0\u5B8C\u6210"
       },
       item.done ? "\u2713" : ""
-    ), /* @__PURE__ */ import_react.default.createElement(
-      "button",
-      {
-        type: "button",
-        className: "mobile-plan-check missed",
-        onClick: onRollover,
-        "aria-label": "\u672A\u5B8C\u6210\uFF0C\u5E73\u79FB\u5230\u6B21\u65E5"
-      },
-      "\xD7"
-    )), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-copy" }, /* @__PURE__ */ import_react.default.createElement("div", { className: `mobile-plan-title ${item.done ? "done" : ""}` }, label), item.title && item.content ? /* @__PURE__ */ import_react.default.createElement("div", { className: `mobile-plan-detail ${item.done ? "done" : ""}` }, item.content) : null));
+    )), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-copy" }, /* @__PURE__ */ import_react.default.createElement("div", { className: `mobile-plan-title ${muted ? "done" : ""}` }, label, item.status === "waiting" ? " \xB7 \u5F85\u8DDF\u8FDB" : ""), item.title && item.content ? /* @__PURE__ */ import_react.default.createElement("div", { className: `mobile-plan-detail ${muted ? "done" : ""}` }, item.content) : null));
   }
-  function MobileTaskCard({ task, day, getItems, onToggleItemDone, onRolloverItem, onEditTask, onEditCell, setCellItems }) {
+  function MobileTaskCard({ task, day, getItems, onToggleItemDone, onEditTask, onEditCell, setCellItems }) {
     const items = getItems(task, day);
+    const allItems = getItems(task, day, { includeCanceled: true });
     const hasItems = items && items.length > 0;
     const deadline = formatDeadline(task);
     function openPlanEditor() {
       onEditCell({ taskId: task.id, day });
-      setCellItems(hasItems ? items.map((item) => ({ ...item })) : [{ title: "", content: "", done: false }]);
+      setCellItems(allItems?.length ? allItems.map((item) => ({ ...item })) : [{ title: "", content: "", done: false, status: "pending" }]);
     }
     return /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-card", style: { borderLeftColor: catColor(task.category) } }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-header" }, /* @__PURE__ */ import_react.default.createElement("div", { style: { flex: 1, minWidth: 0 }, onClick: () => onEditTask({ ...task }) }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-name" }, task.name), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-meta-row" }, /* @__PURE__ */ import_react.default.createElement("span", { className: "mobile-task-meta-pill", style: { background: `${catColor(task.category)}12`, color: catColor(task.category) } }, task.category), deadline ? /* @__PURE__ */ import_react.default.createElement("span", { className: "mobile-task-meta-text" }, "\u622A\u6B62 ", deadline) : null)), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-task-quick-actions" }, /* @__PURE__ */ import_react.default.createElement("button", { className: "mobile-mini-btn", onClick: openPlanEditor }, hasItems ? "\u8BB0\u5F55\u8BA1\u5212" : "\u8BB0\u5F55\u4ECA\u65E5\u8BA1\u5212"), /* @__PURE__ */ import_react.default.createElement("button", { className: "mobile-mini-btn", onClick: () => onEditTask({ ...task }) }, "\u7F16\u8F91"))), hasItems ? /* @__PURE__ */ import_react.default.createElement(import_react.default.Fragment, null, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-divider" }), /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-area" }, /* @__PURE__ */ import_react.default.createElement("div", { className: "mobile-plan-label" }, "\u4ECA\u65E5\u8BA1\u5212"), items.map((item, index) => /* @__PURE__ */ import_react.default.createElement("div", { key: `${task.id}-${day}-${index}`, className: "mobile-plan-item", style: { borderBottom: index < items.length - 1 ? "1px solid #f5f5f5" : "none" } }, renderMobilePlanItem(
       item,
-      () => onToggleItemDone(task.id, day, index),
-      () => onRolloverItem(task.id, day, index)
+      () => onToggleItemDone(task.id, day, index)
     ))))) : null);
   }
   function MobileView({
@@ -22054,7 +22053,6 @@
     setFilterCat,
     getCellItems: getCellItems2,
     onToggleItemDone,
-    onRolloverItem,
     onEditTask,
     onEditCell,
     setCellItems
@@ -22117,7 +22115,6 @@
         day: mobileDay,
         getItems: getCellItems2,
         onToggleItemDone,
-        onRolloverItem,
         onEditTask,
         onEditCell,
         setCellItems
@@ -22221,27 +22218,46 @@
           ...state,
           tasks: state.tasks.map((task) => {
             if (task.id !== action.taskId) return task;
-            const items = getCellItems(task, action.day);
-            if (!items || !items[action.index]) return task;
-            const nextItems = items.map((item, index) => index === action.index ? { ...item, done: !item.done } : item);
+            const allItems = getCellItems(task, action.day, { includeCanceled: true });
+            const visibleIndexes = allItems?.map((item, index) => item.status === "canceled" ? -1 : index).filter((index) => index >= 0);
+            const targetIndex = visibleIndexes?.[action.index];
+            if (!allItems || targetIndex === void 0) return task;
+            const nextItems = allItems.map((item, index) => {
+              if (index !== targetIndex) return item;
+              const nextDone = item.status !== "done";
+              return {
+                ...item,
+                done: nextDone,
+                status: nextDone ? "done" : "pending",
+                handledAt: nextDone ? (/* @__PURE__ */ new Date()).toISOString() : item.handledAt,
+                handledReason: nextDone ? "marked_done" : ""
+              };
+            });
             return { ...task, dailyActions: { ...task.dailyActions, [action.day]: nextItems } };
           })
         });
-      case "rolloverItem": {
-        const nextDay = getNextDayKey(action.day);
-        if (!nextDay) return state;
+      case "moveCellItem": {
+        const targetDay = action.targetDay || getNextDayKey(action.day);
+        if (!targetDay) return state;
         return updateTimestamp({
           ...state,
           tasks: state.tasks.map((task) => {
             if (task.id !== action.taskId) return task;
-            const items = getCellItems(task, action.day);
+            const items = action.items || getCellItems(task, action.day, { includeCanceled: true });
             if (!items || !items[action.index]) return task;
-            const itemToMove = { ...items[action.index], done: false };
+            const itemToMove = {
+              ...items[action.index],
+              done: false,
+              status: "pending",
+              handledAt: (/* @__PURE__ */ new Date()).toISOString(),
+              handledReason: action.reason || "deferred",
+              deferredFrom: action.day
+            };
             const remainingItems = items.filter((_, index) => index !== action.index);
-            const nextDayItems = getCellItems(task, nextDay) || [];
+            const targetDayItems = getCellItems(task, targetDay, { includeCanceled: true }) || [];
             const nextDailyActions = {
               ...task.dailyActions,
-              [nextDay]: [...nextDayItems, itemToMove]
+              [targetDay]: [...targetDayItems, itemToMove]
             };
             if (remainingItems.length) nextDailyActions[action.day] = remainingItems;
             else delete nextDailyActions[action.day];
@@ -22258,6 +22274,24 @@
     if (Number.isNaN(date.getTime())) return "";
     date.setDate(date.getDate() + 1);
     return dateKey(date);
+  }
+  function normalizeCellItemsForSave(items = []) {
+    return items.map((item) => {
+      const title = String(item.title || "").trim();
+      const content = String(item.content || "").trim();
+      if (!title && !content) return null;
+      const status = ["pending", "done", "waiting", "canceled"].includes(item.status) ? item.status : item.done ? "done" : "pending";
+      const normalized = {
+        title,
+        content,
+        done: status === "done",
+        status
+      };
+      if (typeof item.handledAt === "string" && item.handledAt) normalized.handledAt = item.handledAt;
+      if (typeof item.handledReason === "string" && item.handledReason) normalized.handledReason = item.handledReason;
+      if (typeof item.deferredFrom === "string" && item.deferredFrom) normalized.deferredFrom = item.deferredFrom;
+      return normalized;
+    }).filter(Boolean);
   }
   function createToast(message, type = "success") {
     return { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), message, type };
@@ -22276,7 +22310,7 @@
     const [showSettings, setShowSettings] = (0, import_react2.useState)(false);
     const [editTask, setEditTask] = (0, import_react2.useState)(null);
     const [editCell, setEditCell] = (0, import_react2.useState)(null);
-    const [cellItems, setCellItems] = (0, import_react2.useState)([{ title: "", content: "", done: false }]);
+    const [cellItems, setCellItems] = (0, import_react2.useState)([{ title: "", content: "", done: false, status: "pending" }]);
     const [expandedCell, setExpandedCell] = (0, import_react2.useState)(null);
     const [newTask, setNewTask] = (0, import_react2.useState)(() => createEmptyTask());
     const [gistToken, setGistToken] = (0, import_react2.useState)("");
@@ -22500,6 +22534,12 @@
       };
       return levelLabels[user.adminLevel] || "\u4E09\u7EA7\u7BA1\u7406\u5458";
     }
+    function planItemStatusLabel(item) {
+      if (item.status === "done" || item.done) return "\u5DF2\u5B8C\u6210";
+      if (item.status === "waiting") return "\u5F85\u8DDF\u8FDB";
+      if (item.status === "canceled") return "\u5DF2\u53D6\u6D88";
+      return "\u5F85\u529E";
+    }
     async function openNotifications() {
       setShowNotifications(true);
       try {
@@ -22693,14 +22733,14 @@
       return task.deadlineDate >= weekStart && task.deadlineDate <= weekEnd;
     }
     function getLatestPlanSummary(task) {
-      const entries = Object.entries(task.dailyActions || {}).filter(([, items2]) => Array.isArray(items2) && items2.length).sort(([left], [right]) => right.localeCompare(left));
+      const entries = Object.keys(task.dailyActions || {}).map((day) => [day, getCellItems(task, day)]).filter(([, items2]) => items2?.length).sort(([left], [right]) => right.localeCompare(left));
       if (!entries.length) return "";
       const [, items] = entries[0];
       const first = items[0];
       return first?.title || first?.content || "";
     }
     function getArchivePlanDays(task) {
-      return Object.entries(task.dailyActions || {}).filter(([, items]) => Array.isArray(items) && items.length).sort(([left], [right]) => right.localeCompare(left));
+      return Object.keys(task.dailyActions || {}).map((day) => [day, getCellItems(task, day, { includeCanceled: true })]).filter(([, items]) => items?.length).sort(([left], [right]) => right.localeCompare(left));
     }
     function notificationActorLabel(notification) {
       return notification.actorUser?.displayName || notification.actorUser?.username || "\u6709\u4EBA";
@@ -22732,8 +22772,8 @@
       data.tasks.filter((task) => {
         if (filterCat !== "\u5168\u90E8" && task.category !== filterCat) return false;
         if (!query) return true;
-        return task.name.toLowerCase().includes(query) || task.responsible.toLowerCase().includes(query) || task.participants.toLowerCase().includes(query) || formatDeadline(task).toLowerCase().includes(query) || Object.values(task.dailyActions).some(
-          (items) => Array.isArray(items) && items.some((item) => item.title.toLowerCase().includes(query) || item.content.toLowerCase().includes(query))
+        return task.name.toLowerCase().includes(query) || task.responsible.toLowerCase().includes(query) || task.participants.toLowerCase().includes(query) || formatDeadline(task).toLowerCase().includes(query) || Object.keys(task.dailyActions || {}).some(
+          (day) => getCellItems(task, day)?.some((item) => item.title.toLowerCase().includes(query) || item.content.toLowerCase().includes(query))
         );
       })
     );
@@ -22747,7 +22787,9 @@
       data.tasks.filter((task) => {
         if (filterCat !== "\u5168\u90E8" && task.category !== filterCat) return false;
         if (!query) return true;
-        return task.name.toLowerCase().includes(query) || task.responsible.toLowerCase().includes(query) || task.participants.toLowerCase().includes(query) || formatDeadline(task).toLowerCase().includes(query);
+        return task.name.toLowerCase().includes(query) || task.responsible.toLowerCase().includes(query) || task.participants.toLowerCase().includes(query) || formatDeadline(task).toLowerCase().includes(query) || Object.keys(task.dailyActions || {}).some(
+          (day) => getCellItems(task, day)?.some((item) => item.title.toLowerCase().includes(query) || item.content.toLowerCase().includes(query))
+        );
       })
     );
     const archiveSearch = archiveQuery.trim().toLowerCase();
@@ -22891,14 +22933,10 @@
     }
     function handleSaveCellEdit() {
       if (!editCell) return;
-      const validItems = cellItems.map((item) => ({
-        title: item.title.trim(),
-        content: item.content.trim(),
-        done: Boolean(item.done)
-      })).filter((item) => item.title || item.content);
+      const validItems = normalizeCellItemsForSave(cellItems);
       dispatch({ type: "saveCellItems", taskId: editCell.taskId, day: editCell.day, items: validItems });
       setEditCell(null);
-      setCellItems([{ title: "", content: "", done: false }]);
+      setCellItems([{ title: "", content: "", done: false, status: "pending" }]);
       pushToast(validItems.length ? "\u8BA1\u5212\u5DF2\u4FDD\u5B58" : "\u8BA1\u5212\u5DF2\u6E05\u7A7A");
     }
     function appendMentionToPlan(index, user) {
@@ -22913,10 +22951,59 @@
         };
       }));
     }
-    function handleRolloverItem(taskId, day, index) {
-      dispatch({ type: "rolloverItem", taskId, day, index });
-      setExpandedCell(null);
-      pushToast("\u672A\u5B8C\u6210\u8BA1\u5212\u5DF2\u5E73\u79FB\u5230\u6B21\u65E5", "warning");
+    function updateCellItemStatus(index, status) {
+      const handledAt = (/* @__PURE__ */ new Date()).toISOString();
+      setCellItems((current) => current.map((item, itemIndex) => {
+        if (itemIndex !== index) return item;
+        return {
+          ...item,
+          done: status === "done",
+          status,
+          handledAt,
+          handledReason: status
+        };
+      }));
+    }
+    function moveCellItemFromEditor(index, targetDay, reason) {
+      if (!editCell) return;
+      if (targetDay === editCell.day) {
+        pushToast("\u76EE\u6807\u65E5\u671F\u4E0D\u80FD\u548C\u5F53\u524D\u65E5\u671F\u76F8\u540C", "warning");
+        return;
+      }
+      const normalizedEntries = cellItems.map((item, originalIndex) => ({ item: normalizeCellItemsForSave([item])[0], originalIndex })).filter((entry) => entry.item);
+      const normalizedIndex = normalizedEntries.findIndex((entry) => entry.originalIndex === index);
+      if (normalizedIndex < 0) {
+        pushToast("\u8BF7\u5148\u586B\u5199\u8BA1\u5212\u5185\u5BB9", "warning");
+        return;
+      }
+      dispatch({
+        type: "moveCellItem",
+        taskId: editCell.taskId,
+        day: editCell.day,
+        targetDay,
+        index: normalizedIndex,
+        items: normalizedEntries.map((entry) => entry.item),
+        reason
+      });
+      setCellItems((current) => {
+        const next = current.filter((_, itemIndex) => itemIndex !== index);
+        return next.length ? next : [{ title: "", content: "", done: false, status: "pending" }];
+      });
+      pushToast(targetDay === getNextDayKey(editCell.day) ? "\u8BA1\u5212\u5DF2\u987A\u5EF6\u5230\u660E\u5929" : "\u8BA1\u5212\u5DF2\u6539\u671F");
+    }
+    function deferCellItemToTomorrow(index) {
+      if (!editCell) return;
+      moveCellItemFromEditor(index, getNextDayKey(editCell.day), "deferred_tomorrow");
+    }
+    function deferCellItemToDate(index) {
+      if (!editCell) return;
+      const targetDay = window.prompt("\u8F93\u5165\u65B0\u7684\u65E5\u671F\uFF0C\u683C\u5F0F\u4E3A YYYY-MM-DD", getNextDayKey(editCell.day));
+      if (!targetDay) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDay) || Number.isNaN((/* @__PURE__ */ new Date(`${targetDay}T00:00:00`)).getTime())) {
+        pushToast("\u65E5\u671F\u683C\u5F0F\u4E0D\u6B63\u786E", "warning");
+        return;
+      }
+      moveCellItemFromEditor(index, targetDay, "deferred_date");
     }
     function handleImportFile(event) {
       const file = event.target.files?.[0];
@@ -23148,7 +23235,6 @@
         setFilterCat,
         getCellItems,
         onToggleItemDone: (taskId, day, index) => dispatch({ type: "toggleItemDone", taskId, day, index }),
-        onRolloverItem: handleRolloverItem,
         onEditTask: setEditTask,
         onEditCell: setEditCell,
         setCellItems
@@ -23165,6 +23251,7 @@
     )), /* @__PURE__ */ import_react2.default.createElement("div", { className: "desktop-visibility-switch" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: `filter-btn visibility-toggle-btn ${desktopVisibility === "active" ? "active" : ""}`, onClick: () => setDesktopVisibility("active") }, "\u4EC5\u6D3B\u8DC3"), /* @__PURE__ */ import_react2.default.createElement("button", { className: `filter-btn visibility-toggle-btn ${desktopVisibility === "all" ? "active" : ""}`, onClick: () => setDesktopVisibility("all") }, "\u542B\u9759\u9ED8")), /* @__PURE__ */ import_react2.default.createElement("div", { className: "filter-search-wrap" }, /* @__PURE__ */ import_react2.default.createElement("input", { className: "search-input", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "\u{1F50D} \u641C\u7D22\u4EFB\u52A1\u2026" }))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "main-area" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-header-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "corner-cell" }, "\u4E8B\u9879 (", filteredTasks.length, ")"), days.map((date) => /* @__PURE__ */ import_react2.default.createElement("div", { key: date.toISOString(), ref: isToday(date) ? todayColRef : null, className: `day-cell ${isToday(date) ? "today" : ""}` }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-label" }, dayLabel(date)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "day-num" }, date.getDate())))), desktopSections.map(({ category, activeTasks, silentTasks, total }) => /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, { key: category }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "grid-container" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "cat-header", style: { background: `${catColor(category)}12`, borderLeft: `3px solid ${catColor(category)}`, color: catColor(category) } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "cat-header-row" }, /* @__PURE__ */ import_react2.default.createElement("span", null, category, "\uFF08", total, "\uFF09"), silentTasks.length ? /* @__PURE__ */ import_react2.default.createElement("button", { className: "cat-toggle-btn", onClick: () => toggleSilentCategory(category) }, collapsedCategories[category] !== false ? `\u5C55\u5F00\u9759\u9ED8\u4EFB\u52A1\uFF08${silentTasks.length}\uFF09` : `\u6536\u8D77\u9759\u9ED8\u4EFB\u52A1\uFF08${silentTasks.length}\uFF09`) : null))), activeTasks.map((task) => /* @__PURE__ */ import_react2.default.createElement("div", { key: task.id, className: "task-row" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-info", style: { borderLeftColor: catColor(task.category) }, onClick: () => setEditTask({ ...task }) }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-name" }, task.name), /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-meta" }, /* @__PURE__ */ import_react2.default.createElement(PBadge, { priority: task.priority, small: true }), /* @__PURE__ */ import_react2.default.createElement(SBadge, { status: task.status, small: true }), formatDeadline(task) ? /* @__PURE__ */ import_react2.default.createElement("span", { className: "badge-deadline" }, "\u622A\u6B62:", formatDeadline(task)) : null), task.responsible ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-people" }, task.responsible, task.participants ? ` \xB7 ${task.participants}` : "") : null), days.map((date) => {
       const day = dateKey(date);
       const items = getCellItems(task, day);
+      const allItems = getCellItems(task, day, { includeCanceled: true });
       const expandedKey = `${task.id}-${day}`;
       const isExpanded = expandedCell === expandedKey;
       return /* @__PURE__ */ import_react2.default.createElement(
@@ -23179,34 +23266,27 @@
               setExpandedCell(expandedKey);
             } else {
               setEditCell({ taskId: task.id, day });
-              setCellItems([{ title: "", content: "", done: false }]);
+              setCellItems(allItems?.length ? allItems.map((item) => ({ ...item })) : [{ title: "", content: "", done: false, status: "pending" }]);
             }
           }
         },
         items ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, !isExpanded ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3 } }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${expandedKey}-${index}` }, renderCompactPlanItem(
           item,
-          () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }),
-          () => handleRolloverItem(task.id, day, index)
+          () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index })
         )))) : /* @__PURE__ */ import_react2.default.createElement("div", { className: "cell-expanded", onClick: (event) => event.stopPropagation() }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${expandedKey}-full-${index}`, style: { display: "flex", alignItems: "flex-start", gap: 6, marginBottom: index < items.length - 1 ? 10 : 0 } }, /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", gap: 4, flexShrink: 0, marginTop: 2 } }, renderPlanActionButton({
           label: "\u2713",
           active: item.done,
           activeColor: "#22c55e",
           title: item.done ? "\u53D6\u6D88\u5B8C\u6210" : "\u6807\u8BB0\u5B8C\u6210",
           onClick: () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index })
-        }), renderPlanActionButton({
-          label: "\xD7",
-          active: false,
-          activeColor: "#ef4444",
-          title: "\u672A\u5B8C\u6210\uFF0C\u5E73\u79FB\u5230\u6B21\u65E5",
-          onClick: () => handleRolloverItem(task.id, day, index)
-        })), /* @__PURE__ */ import_react2.default.createElement("div", { style: { opacity: item.done ? 0.5 : 1 } }, item.title ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { fontWeight: 600, fontSize: 12, color: "#333", marginBottom: 2, textDecoration: item.done ? "line-through" : "none" } }, item.title) : null, item.content ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "cell-expanded-text", style: { textDecoration: item.done ? "line-through" : "none" } }, item.content) : null))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "cell-expanded-actions" }, /* @__PURE__ */ import_react2.default.createElement(
+        })), /* @__PURE__ */ import_react2.default.createElement("div", { style: { opacity: item.done || item.status === "waiting" ? 0.5 : 1 } }, item.title ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { fontWeight: 600, fontSize: 12, color: "#333", marginBottom: 2, textDecoration: item.done ? "line-through" : "none" } }, item.title, item.status === "waiting" ? " \xB7 \u5F85\u8DDF\u8FDB" : "") : null, item.content ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "cell-expanded-text", style: { textDecoration: item.done ? "line-through" : "none" } }, item.content) : null))), /* @__PURE__ */ import_react2.default.createElement("div", { className: "cell-expanded-actions" }, /* @__PURE__ */ import_react2.default.createElement(
           "button",
           {
             className: "btn btn-outline",
             style: { fontSize: 11, padding: "3px 10px" },
             onClick: () => {
               setEditCell({ taskId: task.id, day });
-              setCellItems(items.map((item) => ({ ...item })));
+              setCellItems((allItems || items).map((item) => ({ ...item })));
               setExpandedCell(null);
             }
           },
@@ -23216,6 +23296,7 @@
     }))), (desktopVisibility === "all" || query) && (query || collapsedCategories[category] === false) ? silentTasks.map((task) => /* @__PURE__ */ import_react2.default.createElement("div", { key: task.id, className: "task-row task-row-muted" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-info task-info-muted", style: { borderLeftColor: catColor(task.category) }, onClick: () => setEditTask({ ...task }) }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-name" }, task.name), /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-meta" }, /* @__PURE__ */ import_react2.default.createElement(PBadge, { priority: task.priority, small: true }), /* @__PURE__ */ import_react2.default.createElement(SBadge, { status: task.status, small: true }), formatDeadline(task) ? /* @__PURE__ */ import_react2.default.createElement("span", { className: "badge-deadline" }, "\u622A\u6B62:", formatDeadline(task)) : null), task.responsible ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "task-people" }, task.responsible, task.participants ? ` \xB7 ${task.participants}` : "") : null), days.map((date) => {
       const day = dateKey(date);
       const items = getCellItems(task, day);
+      const allItems = getCellItems(task, day, { includeCanceled: true });
       return /* @__PURE__ */ import_react2.default.createElement(
         "div",
         {
@@ -23224,14 +23305,13 @@
           onClick: () => {
             if (!items) {
               setEditCell({ taskId: task.id, day });
-              setCellItems([{ title: "", content: "", done: false }]);
+              setCellItems(allItems?.length ? allItems.map((item) => ({ ...item })) : [{ title: "", content: "", done: false, status: "pending" }]);
             }
           }
         },
         items ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3 } }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${task.id}-${day}-silent-${index}` }, renderCompactPlanItem(
           item,
-          () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index }),
-          () => handleRolloverItem(task.id, day, index)
+          () => dispatch({ type: "toggleItemDone", taskId: task.id, day, index })
         )))) : /* @__PURE__ */ import_react2.default.createElement("div", { className: "daily-cell-empty daily-cell-empty-muted" }, "+")
       );
     }))) : null)), filteredTasks.length === 0 ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "empty-grid-state" }, "\u6682\u65E0\u5339\u914D\u4EFB\u52A1\uFF0C\u70B9\u51FB\u53F3\u4E0A\u89D2\u201C+ \u65B0\u4EFB\u52A1\u201D\u6DFB\u52A0") : null)), isMobile ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "mobile-bottom-bar" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn", onClick: () => setMobileDay(dateKey(/* @__PURE__ */ new Date())) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\u25C9"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u4ECA\u5929")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn", onClick: () => setShowArchive(true) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\u2713"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u5F52\u6863")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn", onClick: openNotifications }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\uFF20"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u901A\u77E5", unreadNotifications > 0 ? `(${unreadNotifications > 99 ? "99+" : unreadNotifications})` : "")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn mobile-bottom-btn-primary", onClick: () => setShowAdd(true) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\uFF0B"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u65B0\u4EFB\u52A1")), /* @__PURE__ */ import_react2.default.createElement("button", { className: "mobile-bottom-btn", onClick: () => setShowSettings(true) }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "mobile-bottom-icon" }, "\u2699"), /* @__PURE__ */ import_react2.default.createElement("span", null, "\u8BBE\u7F6E"))) : null, /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showAdd, onClose: () => setShowAdd(false), title: "\u6DFB\u52A0\u65B0\u4EFB\u52A1" }, /* @__PURE__ */ import_react2.default.createElement(TaskForm, { task: newTask, setTask: setNewTask, categories: data.categories, mentionUsers }), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark btn-block", onClick: handleAddTask }, "\u6DFB\u52A0")), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: Boolean(editTask), onClose: () => setEditTask(null), title: "\u7F16\u8F91\u4EFB\u52A1" }, editTask ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement(TaskForm, { task: editTask, setTask: setEditTask, categories: data.categories, mentionUsers }), /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", gap: 10, marginTop: 10 } }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", style: { flex: 1, padding: 11, borderRadius: 10, fontSize: 14 }, onClick: handleSaveTaskEdit }, "\u4FDD\u5B58"), taskHasMentions(editTask) ? /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", style: { padding: "11px 16px", borderRadius: 10, fontSize: 14 }, onClick: () => handleCompleteMentionTask(editTask) }, "\u4EFB\u52A1\u5DF2\u5B8C\u6210") : null, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-success", style: { padding: "11px 16px", borderRadius: 10, fontSize: 14 }, onClick: () => dispatch({ type: "archiveTask", id: editTask.id }) }, "\u5B8C\u7ED3\u5F52\u6863"), /* @__PURE__ */ import_react2.default.createElement(
@@ -23255,8 +23335,8 @@
       "\u5220\u9664"
     ))) : null), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: Boolean(editCell), onClose: () => {
       setEditCell(null);
-      setCellItems([{ title: "", content: "", done: false }]);
-    }, title: "\u7F16\u8F91\u5F53\u65E5\u8BA1\u5212", width: 420 }, editCell ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", { style: { fontSize: 12, color: "#999", marginBottom: 12 } }, data.tasks.find((task) => task.id === editCell.taskId)?.name, " \xB7 ", editCell.day), /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, cellItems.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `editor-${index}`, className: "plan-editor-card" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "plan-editor-head" }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "plan-editor-title" }, "\u8BA1\u5212 ", index + 1), cellItems.length > 1 ? /* @__PURE__ */ import_react2.default.createElement("button", { className: "ghost-icon-btn", onClick: () => setCellItems((current) => current.filter((_, itemIndex) => itemIndex !== index)) }, "\xD7") : null), /* @__PURE__ */ import_react2.default.createElement(
+      setCellItems([{ title: "", content: "", done: false, status: "pending" }]);
+    }, title: "\u7F16\u8F91\u5F53\u65E5\u8BA1\u5212", width: 420 }, editCell ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", { style: { fontSize: 12, color: "#999", marginBottom: 12 } }, data.tasks.find((task) => task.id === editCell.taskId)?.name, " \xB7 ", editCell.day), /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, cellItems.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `editor-${index}`, className: "plan-editor-card", style: item.status === "canceled" ? { opacity: 0.65 } : void 0 }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "plan-editor-head" }, /* @__PURE__ */ import_react2.default.createElement("span", { className: "plan-editor-title" }, "\u8BA1\u5212 ", index + 1, " \xB7 ", planItemStatusLabel(item)), cellItems.length > 1 ? /* @__PURE__ */ import_react2.default.createElement("button", { className: "ghost-icon-btn", onClick: () => setCellItems((current) => current.filter((_, itemIndex) => itemIndex !== index)) }, "\xD7") : null), /* @__PURE__ */ import_react2.default.createElement(
       "input",
       {
         className: "field-input",
@@ -23274,7 +23354,7 @@
         value: item.content,
         onChange: (event) => setCellItems((current) => current.map((it, itemIndex) => itemIndex === index ? { ...it, content: event.target.value } : it))
       }
-    ), /* @__PURE__ */ import_react2.default.createElement(MentionPicker, { users: mentionUsers, onMention: (user) => appendMentionToPlan(index, user) }), planHasMentions(item) ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "plan-editor-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => handleCompleteMentionPlan(index) }, "\u4EFB\u52A1\u5DF2\u5B8C\u6210")) : null))), /* @__PURE__ */ import_react2.default.createElement("button", { className: "plan-add-btn", onClick: () => setCellItems((current) => [...current, { title: "", content: "", done: false }]) }, "+ \u6DFB\u52A0\u8BA1\u5212"), /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", gap: 10, marginTop: 12 } }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", style: { flex: 1, padding: 11, borderRadius: 10, fontSize: 14 }, onClick: handleSaveCellEdit }, "\u4FDD\u5B58"), /* @__PURE__ */ import_react2.default.createElement(
+    ), /* @__PURE__ */ import_react2.default.createElement(MentionPicker, { users: mentionUsers, onMention: (user) => appendMentionToPlan(index, user) }), planHasMentions(item) ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "plan-editor-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => handleCompleteMentionPlan(index) }, "\u4EFB\u52A1\u5DF2\u5B8C\u6210")) : null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "plan-editor-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => updateCellItemStatus(index, item.status === "done" || item.done ? "pending" : "done") }, item.status === "done" || item.done ? "\u6062\u590D\u5F85\u529E" : "\u6807\u8BB0\u5B8C\u6210"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => deferCellItemToTomorrow(index) }, "\u987A\u5EF6\u5230\u660E\u5929"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => deferCellItemToDate(index) }, "\u6539\u5230\u6307\u5B9A\u65E5\u671F"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: () => updateCellItemStatus(index, item.status === "waiting" ? "pending" : "waiting") }, item.status === "waiting" ? "\u6062\u590D\u5F85\u529E" : "\u8BBE\u4E3A\u5F85\u8DDF\u8FDB"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-danger", onClick: () => updateCellItemStatus(index, item.status === "canceled" ? "pending" : "canceled") }, item.status === "canceled" ? "\u6062\u590D\u5F85\u529E" : "\u53D6\u6D88\u6B64\u9879"))))), /* @__PURE__ */ import_react2.default.createElement("button", { className: "plan-add-btn", onClick: () => setCellItems((current) => [...current, { title: "", content: "", done: false, status: "pending" }]) }, "+ \u6DFB\u52A0\u8BA1\u5212"), /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", gap: 10, marginTop: 12 } }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-dark", style: { flex: 1, padding: 11, borderRadius: 10, fontSize: 14 }, onClick: handleSaveCellEdit }, "\u4FDD\u5B58"), /* @__PURE__ */ import_react2.default.createElement(
       "button",
       {
         className: "btn btn-danger",
@@ -23282,7 +23362,7 @@
         onClick: () => {
           dispatch({ type: "saveCellItems", taskId: editCell.taskId, day: editCell.day, items: [] });
           setEditCell(null);
-          setCellItems([{ title: "", content: "", done: false }]);
+          setCellItems([{ title: "", content: "", done: false, status: "pending" }]);
           pushToast("\u8BA1\u5212\u5DF2\u6E05\u9664", "warning");
         }
       },
@@ -23313,7 +23393,7 @@
         })
       },
       "\u5220\u9664"
-    ))))))), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: Boolean(archiveDetailTask), onClose: () => setArchiveDetailTask(null), title: archiveDetailTask ? `${archiveDetailTask.name} \xB7 \u5386\u53F2\u8BA1\u5212` : "\u5386\u53F2\u8BA1\u5212", width: 520 }, archiveDetailTask ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-detail-meta" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5206\u7C7B\uFF1A"), archiveDetailTask.category), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F52\u6863\u65F6\u95F4\uFF1A"), archiveDetailTask.archivedAt ? new Date(archiveDetailTask.archivedAt).toLocaleString() : "\u672A\u8BB0\u5F55"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u622A\u6B62\u65E5\u671F\uFF1A"), formatDeadline(archiveDetailTask) || "\u672A\u8BBE\u7F6E")), getArchivePlanDays(archiveDetailTask).length === 0 ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { padding: 20, textAlign: "center", color: "#bbb" } }, "\u8FD9\u4E2A\u4EFB\u52A1\u6CA1\u6709\u5386\u53F2\u8BA1\u5212\u8BB0\u5F55") : /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-list" }, getArchivePlanDays(archiveDetailTask).map(([day, items]) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${archiveDetailTask.id}-${day}`, className: "archive-plan-day" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-day-label" }, formatDateInput(day)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-items" }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${archiveDetailTask.id}-${day}-${index}`, className: "archive-plan-item" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-check ${item.done ? "done" : ""}` }, item.done ? "\u2713" : ""), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-copy" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-title ${item.done ? "done" : ""}` }, item.title || item.content.split("\n")[0]), item.title && item.content ? /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-detail ${item.done ? "done" : ""}` }, item.content) : null)))))))) : null), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showSettings, onClose: () => setShowSettings(false), title: "\u8BBE\u7F6E", width: 420 }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section", style: { marginTop: 0, paddingTop: 0, borderTop: "none" } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u2601\uFE0F \u670D\u52A1\u7AEF\u540C\u6B65"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u65B9\u5F0F\uFF1A"), "Alibaba Cloud API + MySQL"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F53\u524D\u5DE5\u4F5C\u7A7A\u95F4\uFF1A"), gistId), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u72B6\u6001\uFF1A"), syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u8FDE\u63A5\u5931\u8D25" : "\u540C\u6B65\u4E2D")), /* @__PURE__ */ import_react2.default.createElement("p", { className: "settings-note", style: { marginTop: 10 } }, "\u5F53\u524D\u7248\u672C\u4EE5\u670D\u52A1\u7AEF\u6570\u636E\u5E93\u4F5C\u4E3A\u552F\u4E00\u771F\u5B9E\u6570\u636E\u6E90\u3002\u672C\u5730 localStorage \u7EE7\u7EED\u4FDD\u7559\u7528\u4E8E\u7F13\u5B58\u548C\u5907\u4EFD\uFF0C\u4E0D\u518D\u4F7F\u7528 GitHub Gist \u4F5C\u4E3A\u4E3B\u540C\u6B65\u65B9\u5F0F\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: pullFromCloud }, "\u2193 \u4ECE\u670D\u52A1\u7AEF\u5237\u65B0"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: handleLogout }, "\u9000\u51FA\u767B\u5F55"))), isAdmin ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u8D26\u53F7\u7BA1\u7406"), /* @__PURE__ */ import_react2.default.createElement("form", { className: "admin-user-form", onSubmit: handleCreateAdminUser }, /* @__PURE__ */ import_react2.default.createElement(
+    ))))))), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: Boolean(archiveDetailTask), onClose: () => setArchiveDetailTask(null), title: archiveDetailTask ? `${archiveDetailTask.name} \xB7 \u5386\u53F2\u8BA1\u5212` : "\u5386\u53F2\u8BA1\u5212", width: 520 }, archiveDetailTask ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-detail-meta" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5206\u7C7B\uFF1A"), archiveDetailTask.category), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F52\u6863\u65F6\u95F4\uFF1A"), archiveDetailTask.archivedAt ? new Date(archiveDetailTask.archivedAt).toLocaleString() : "\u672A\u8BB0\u5F55"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u622A\u6B62\u65E5\u671F\uFF1A"), formatDeadline(archiveDetailTask) || "\u672A\u8BBE\u7F6E")), getArchivePlanDays(archiveDetailTask).length === 0 ? /* @__PURE__ */ import_react2.default.createElement("div", { style: { padding: 20, textAlign: "center", color: "#bbb" } }, "\u8FD9\u4E2A\u4EFB\u52A1\u6CA1\u6709\u5386\u53F2\u8BA1\u5212\u8BB0\u5F55") : /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-list" }, getArchivePlanDays(archiveDetailTask).map(([day, items]) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${archiveDetailTask.id}-${day}`, className: "archive-plan-day" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-day-label" }, formatDateInput(day)), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-items" }, items.map((item, index) => /* @__PURE__ */ import_react2.default.createElement("div", { key: `${archiveDetailTask.id}-${day}-${index}`, className: "archive-plan-item" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-check ${item.done ? "done" : ""}` }, item.done ? "\u2713" : item.status === "canceled" ? "\xD7" : ""), /* @__PURE__ */ import_react2.default.createElement("div", { className: "archive-plan-copy" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-title ${item.done || item.status === "canceled" ? "done" : ""}` }, item.title || item.content.split("\n")[0], item.status === "waiting" ? " \xB7 \u5F85\u8DDF\u8FDB" : item.status === "canceled" ? " \xB7 \u5DF2\u53D6\u6D88" : ""), item.title && item.content ? /* @__PURE__ */ import_react2.default.createElement("div", { className: `archive-plan-detail ${item.done || item.status === "canceled" ? "done" : ""}` }, item.content) : null)))))))) : null), /* @__PURE__ */ import_react2.default.createElement(Modal, { open: showSettings, onClose: () => setShowSettings(false), title: "\u8BBE\u7F6E", width: 420 }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section", style: { marginTop: 0, paddingTop: 0, borderTop: "none" } }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u2601\uFE0F \u670D\u52A1\u7AEF\u540C\u6B65"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "status-box" }, /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u65B9\u5F0F\uFF1A"), "Alibaba Cloud API + MySQL"), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u5F53\u524D\u5DE5\u4F5C\u7A7A\u95F4\uFF1A"), gistId), /* @__PURE__ */ import_react2.default.createElement("div", null, /* @__PURE__ */ import_react2.default.createElement("strong", null, "\u540C\u6B65\u72B6\u6001\uFF1A"), syncStatus === "ok" ? "\u5DF2\u540C\u6B65" : syncStatus === "error" ? "\u8FDE\u63A5\u5931\u8D25" : "\u540C\u6B65\u4E2D")), /* @__PURE__ */ import_react2.default.createElement("p", { className: "settings-note", style: { marginTop: 10 } }, "\u5F53\u524D\u7248\u672C\u4EE5\u670D\u52A1\u7AEF\u6570\u636E\u5E93\u4F5C\u4E3A\u552F\u4E00\u771F\u5B9E\u6570\u636E\u6E90\u3002\u672C\u5730 localStorage \u7EE7\u7EED\u4FDD\u7559\u7528\u4E8E\u7F13\u5B58\u548C\u5907\u4EFD\uFF0C\u4E0D\u518D\u4F7F\u7528 GitHub Gist \u4F5C\u4E3A\u4E3B\u540C\u6B65\u65B9\u5F0F\u3002"), /* @__PURE__ */ import_react2.default.createElement("div", { className: "inline-actions" }, /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: pullFromCloud }, "\u2193 \u4ECE\u670D\u52A1\u7AEF\u5237\u65B0"), /* @__PURE__ */ import_react2.default.createElement("button", { className: "btn btn-outline", onClick: handleLogout }, "\u9000\u51FA\u767B\u5F55"))), isAdmin ? /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section" }, /* @__PURE__ */ import_react2.default.createElement("div", { className: "data-section-title" }, "\u8D26\u53F7\u7BA1\u7406"), /* @__PURE__ */ import_react2.default.createElement("form", { className: "admin-user-form", onSubmit: handleCreateAdminUser }, /* @__PURE__ */ import_react2.default.createElement(
       "input",
       {
         className: "field-input",
@@ -23370,34 +23450,30 @@
       }
     ), /* @__PURE__ */ import_react2.default.createElement(ToastStack, { toasts }), /* @__PURE__ */ import_react2.default.createElement("input", { ref: fileRef, type: "file", accept: ".json", style: { display: "none" }, onChange: handleImportFile }));
   }
-  function renderCompactPlanItem(item, onToggle, onRollover) {
+  function renderCompactPlanItem(item, onToggle) {
     const label = item.title || item.content.split("\n")[0];
+    const muted = item.done || item.status === "waiting";
     return /* @__PURE__ */ import_react2.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, renderPlanActionButton({
       label: "\u2713",
       active: item.done,
       activeColor: "#22c55e",
       title: item.done ? "\u53D6\u6D88\u5B8C\u6210" : "\u6807\u8BB0\u5B8C\u6210",
       onClick: onToggle
-    }), renderPlanActionButton({
-      label: "\xD7",
-      active: false,
-      activeColor: "#ef4444",
-      title: "\u672A\u5B8C\u6210\uFF0C\u5E73\u79FB\u5230\u6B21\u65E5",
-      onClick: onRollover
     }), /* @__PURE__ */ import_react2.default.createElement(
       "span",
       {
         style: {
           fontSize: 12,
           lineHeight: 1.4,
-          color: item.done ? "#aaa" : "#333",
+          color: muted ? "#aaa" : "#333",
           textDecoration: item.done ? "line-through" : "none",
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap"
         }
       },
-      label
+      label,
+      item.status === "waiting" ? " \xB7 \u5F85\u8DDF\u8FDB" : ""
     ));
   }
   function renderPlanActionButton({ label, active, activeColor, title, onClick }) {
@@ -23417,7 +23493,7 @@
           borderRadius: 3,
           border: `1.5px solid ${active ? activeColor : "#ccc"}`,
           background: active ? activeColor : "transparent",
-          color: active ? "#fff" : activeColor,
+          color: "#fff",
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
@@ -23428,7 +23504,7 @@
           fontWeight: 700
         }
       },
-      active || label === "\xD7" ? label : ""
+      active ? label : ""
     );
   }
   (0, import_client.createRoot)(document.getElementById("app")).render(/* @__PURE__ */ import_react2.default.createElement(App, null));

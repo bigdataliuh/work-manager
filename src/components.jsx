@@ -185,8 +185,9 @@ function renderPlanItem(item, onToggle, compact = false) {
   );
 }
 
-function renderMobilePlanItem(item, onToggle, onRollover) {
+function renderMobilePlanItem(item, onToggle) {
   const label = item.title || item.content.split("\n")[0];
+  const muted = item.done || item.status === "waiting";
   return (
     <div className="mobile-plan-row">
       <div className="mobile-plan-actions">
@@ -198,31 +199,24 @@ function renderMobilePlanItem(item, onToggle, onRollover) {
         >
           {item.done ? "✓" : ""}
         </button>
-        <button
-          type="button"
-          className="mobile-plan-check missed"
-          onClick={onRollover}
-          aria-label="未完成，平移到次日"
-        >
-          ×
-        </button>
       </div>
       <div className="mobile-plan-copy">
-        <div className={`mobile-plan-title ${item.done ? "done" : ""}`}>{label}</div>
-        {item.title && item.content ? <div className={`mobile-plan-detail ${item.done ? "done" : ""}`}>{item.content}</div> : null}
+        <div className={`mobile-plan-title ${muted ? "done" : ""}`}>{label}{item.status === "waiting" ? " · 待跟进" : ""}</div>
+        {item.title && item.content ? <div className={`mobile-plan-detail ${muted ? "done" : ""}`}>{item.content}</div> : null}
       </div>
     </div>
   );
 }
 
-export function MobileTaskCard({ task, day, getItems, onToggleItemDone, onRolloverItem, onEditTask, onEditCell, setCellItems }) {
+export function MobileTaskCard({ task, day, getItems, onToggleItemDone, onEditTask, onEditCell, setCellItems }) {
   const items = getItems(task, day);
+  const allItems = getItems(task, day, { includeCanceled: true });
   const hasItems = items && items.length > 0;
   const deadline = formatDeadline(task);
 
   function openPlanEditor() {
     onEditCell({ taskId: task.id, day });
-    setCellItems(hasItems ? items.map((item) => ({ ...item })) : [{ title: "", content: "", done: false }]);
+    setCellItems(allItems?.length ? allItems.map((item) => ({ ...item })) : [{ title: "", content: "", done: false, status: "pending" }]);
   }
 
   return (
@@ -249,8 +243,7 @@ export function MobileTaskCard({ task, day, getItems, onToggleItemDone, onRollov
               <div key={`${task.id}-${day}-${index}`} className="mobile-plan-item" style={{ borderBottom: index < items.length - 1 ? "1px solid #f5f5f5" : "none" }}>
                 {renderMobilePlanItem(
                   item,
-                  () => onToggleItemDone(task.id, day, index),
-                  () => onRolloverItem(task.id, day, index)
+                  () => onToggleItemDone(task.id, day, index)
                 )}
               </div>
             ))}
@@ -272,7 +265,6 @@ export function MobileView({
   setFilterCat,
   getCellItems,
   onToggleItemDone,
-  onRolloverItem,
   onEditTask,
   onEditCell,
   setCellItems
@@ -354,7 +346,6 @@ export function MobileView({
             day={mobileDay}
             getItems={getCellItems}
             onToggleItemDone={onToggleItemDone}
-            onRolloverItem={onRolloverItem}
             onEditTask={onEditTask}
             onEditCell={onEditCell}
             setCellItems={setCellItems}
